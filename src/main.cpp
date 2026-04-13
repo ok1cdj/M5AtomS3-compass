@@ -52,8 +52,8 @@ void loop() {
   {
     compass.read();
     // Return Azimuth reading
-    int rawX = compass.getRawX();
-    int rawY = compass.getRawY();
+    int rawX = compass.getX();
+    int rawY = compass.getY();
 
     float heading = atan2(rawY - offsetY, rawX - offsetX);
     float declinationAngle = (5.0 + (15.0 / 60.0)) * M_PI / 180.0;
@@ -99,8 +99,8 @@ void runCalibration() {
   unsigned long startTime = millis();
   while (millis() - startTime < 15000) {
     compass.read();
-    int rawX = compass.getRawX();
-    int rawY = compass.getRawY();
+    int rawX = compass.getX();
+    int rawY = compass.getY();
 
     if (rawX < minX) minX = rawX;
     if (rawX > maxX) maxX = rawX;
