@@ -18,22 +18,20 @@ const int MAGNETOMETER_STEPS = 10;
 const bool MAGNETOMETER_ADVANCED_SMOOTHING = true;
 const int MS_BETWEEN_SAMPLES = 100;
 
-int minX,maxX,minY,maxY, minZ,maxZ;
+int offsetX = 0;
+int offsetY = 0;
 
+void runCalibration(); // Forward declaration
 
 void setup() {
   WiFi.mode(WIFI_OFF);
   btStop();
   setCpuFrequencyMhz(80); //Set CPU clock to 80MHz fo example
   M5.begin(true, true, true, false);  // Init AtomS3(Initialize LCD, serial port).
-  preferences.begin("compass_calibration", false);
-  minX = preferences.getInt("minX", 0);
-  minY = preferences.getInt("minY", 0);
-  minZ = preferences.getInt("minZ", 0);
-  maxX = preferences.getInt("maxX", 0);
-  maxY = preferences.getInt("maxY", 0);
-  maxZ = preferences.getInt("maxZ", 0);
-  compass.setCalibration(minX, minY, minZ, maxX, maxY, maxZ);
+  preferences.begin("compass", false);
+  offsetX = preferences.getInt("offX", 0);
+  offsetY = preferences.getInt("offY", 0);
+  preferences.end();
 
   Wire.begin(38, 39);
   compass.init();
@@ -54,9 +52,22 @@ void loop() {
   {
     compass.read();
     // Return Azimuth reading
-    a = compass.getAzimuth() - 90;
-	    previousMillis = currentMillis;
+    int rawX = compass.getRawX();
+    int rawY = compass.getRawY();
+
+    float heading = atan2(rawY - offsetY, rawX - offsetX);
+    float declinationAngle = (5.0 + (15.0 / 60.0)) * M_PI / 180.0;
+    heading += declinationAngle;
+
+    if(heading < 0) heading += 2 * M_PI;
+    if(heading > 2 * M_PI) heading -= 2 * M_PI;
+    
+    a = round(heading * 180 / M_PI);
+    
+	  previousMillis = currentMillis;
+    a = a - 90;
     if (a < 0) a = a + 360;
+
     USBSerial.print("A: ");
     USBSerial.print(a);
     USBSerial.println();
@@ -66,36 +77,55 @@ void loop() {
     M5.Lcd.setCursor(10, 15);
     if (a < 100)  M5.Lcd.print(" ");
     M5.Lcd.println(a);
+  }
 
-if (M5.Btn.wasReleased() || M5.Btn.pressedFor(1000)) {
-        USBSerial.print('A');
-        M5.Lcd.print("A");
-    }
-
+  if (M5.Btn.pressedFor(2000)) {
+      runCalibration();
+  } else if (M5.Btn.wasReleased()) {
+      USBSerial.print('A');
+      M5.Lcd.print("A");
   }
 }
 
-void calibration() {
-	 Serial.println("This will provide calibration settings for your QMC5883L chip. When prompted, move the magnetometer in all directions until the calibration is complete.");
-  Serial.println("Calibration will begin in 5 seconds.");
-  delay(5000);
+void runCalibration() {
+  int minX = 32767, maxX = -32767;
+  int minY = 32767, maxY = -32767;
 
-  Serial.println("CALIBRATING. Keep moving your sensor...");
-  compass.calibrate();
+  M5.Lcd.fillScreen(RED);
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.setCursor(5, 25);
+  M5.Lcd.println("CALIBRATING...");
 
-  Serial.println("DONE. Copy the lines below and paste it into your projects sketch.);");
-  minX = compass.getCalibrationOffset(0);
-  minY = compass.getCalibrationOffset(1);
-  minZ = compass.getCalibrationOffset(2);
-  maxX = compass.getCalibrationScale(0);
-  maxY = compass.getCalibrationScale(1);
-  maxZ = compass.getCalibrationScale(2);
-  preferences.putInt("minX", minX);
-  preferences.putInt("minY", minY);
-  preferences.putInt("minZ", minZ);
-  preferences.putInt("maxX", maxX);
-  preferences.putInt("maxY", maxY);
-  preferences.putInt("maxZ", maxZ);
-	
+  unsigned long startTime = millis();
+  while (millis() - startTime < 15000) {
+    compass.read();
+    int rawX = compass.getRawX();
+    int rawY = compass.getRawY();
+
+    if (rawX < minX) minX = rawX;
+    if (rawX > maxX) maxX = rawX;
+    if (rawY < minY) minY = rawY;
+    if (rawY > maxY) maxY = rawY;
+
+    M5.update(); // Keep M5 services running
+  }
+  
+  offsetX = (maxX + minX) / 2;
+  offsetY = (maxY + minY) / 2;
+  
+  preferences.begin("compass", false);
+  preferences.putInt("offX", offsetX);
+  preferences.putInt("offY", offsetY);
+  preferences.end();
+  
+  M5.Lcd.fillScreen(GREEN);
+  M5.Lcd.setTextSize(2);
+  M5.Lcd.setCursor(35, 25);
+  M5.Lcd.println("DONE");
+  delay(2000);
+
+  M5.Lcd.fillScreen(BLACK);
+  M5.Lcd.setCursor(0,0);
+  M5.Lcd.println("TEST"); // Restore initial screen message
 }
 
