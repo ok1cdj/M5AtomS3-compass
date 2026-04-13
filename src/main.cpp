@@ -23,6 +23,19 @@ int offsetY = 0;
 
 void runCalibration(); // Forward declaration
 
+void readRawCompass(int* x, int* y, int* z) {
+  Wire.beginTransmission(0x0D);
+  Wire.write(0x00);
+  Wire.endTransmission();
+
+  Wire.requestFrom(0x0D, 6);
+  if (Wire.available() >= 6) {
+    *x = (int16_t)(Wire.read() | (Wire.read() << 8));
+    *y = (int16_t)(Wire.read() | (Wire.read() << 8));
+    *z = (int16_t)(Wire.read() | (Wire.read() << 8));
+  }
+}
+
 void setup() {
   WiFi.mode(WIFI_OFF);
   btStop();
@@ -50,10 +63,9 @@ void loop() {
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis > interval)
   {
-    compass.read();
+    int rawX, rawY, rawZ;
+    readRawCompass(&rawX, &rawY, &rawZ);
     // Return Azimuth reading
-    int rawX = compass.getX();
-    int rawY = compass.getY();
 
     float heading = atan2(rawY - offsetY, rawX - offsetX);
     float declinationAngle = (5.0 + (15.0 / 60.0)) * M_PI / 180.0;
@@ -98,9 +110,8 @@ void runCalibration() {
 
   unsigned long startTime = millis();
   while (millis() - startTime < 15000) {
-    compass.read();
-    int rawX = compass.getX();
-    int rawY = compass.getY();
+    int rawX, rawY, rawZ;
+    readRawCompass(&rawX, &rawY, &rawZ);
 
     if (rawX < minX) minX = rawX;
     if (rawX > maxX) maxX = rawX;
