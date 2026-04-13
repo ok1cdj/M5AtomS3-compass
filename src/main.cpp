@@ -20,6 +20,7 @@ const int MS_BETWEEN_SAMPLES = 100;
 
 int offsetX = 0;
 int offsetY = 0;
+int offsetZ = 0;
 
 void runCalibration(); // Forward declaration
 
@@ -44,6 +45,7 @@ void setup() {
   preferences.begin("compass", false);
   offsetX = preferences.getInt("offX", 0);
   offsetY = preferences.getInt("offY", 0);
+  offsetZ = preferences.getInt("offZ", 0);
   preferences.end();
 
   Wire.begin(38, 39);
@@ -102,6 +104,7 @@ void loop() {
 void runCalibration() {
   int minX = 32767, maxX = -32767;
   int minY = 32767, maxY = -32767;
+  int minZ = 32767, maxZ = -32767;
 
   M5.Lcd.fillScreen(RED);
   M5.Lcd.setTextSize(2);
@@ -117,16 +120,20 @@ void runCalibration() {
     if (rawX > maxX) maxX = rawX;
     if (rawY < minY) minY = rawY;
     if (rawY > maxY) maxY = rawY;
+    if (rawZ < minZ) minZ = rawZ;
+    if (rawZ > maxZ) maxZ = rawZ;
 
     M5.update(); // Keep M5 services running
   }
   
   offsetX = (maxX + minX) / 2;
   offsetY = (maxY + minY) / 2;
+  offsetZ = (maxZ + minZ) / 2;
   
   preferences.begin("compass", false);
   preferences.putInt("offX", offsetX);
   preferences.putInt("offY", offsetY);
+  preferences.putInt("offZ", offsetZ);
   preferences.end();
   
   M5.Lcd.fillScreen(GREEN);
