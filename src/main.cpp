@@ -53,7 +53,6 @@ void setup() {
   compass.setMagneticDeclination(5, 15);
   compass.setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
   M5.Lcd.setRotation(2);
-  M5.Lcd.println("TEST");
 
 
 }
@@ -82,9 +81,6 @@ void loop() {
     a = a - 90;
     if (a < 0) a = a + 360;
 
-    USBSerial.print("A: ");
-    USBSerial.print(a);
-    USBSerial.println();
     M5.Lcd.setTextSize(5);
     M5.Lcd.fillRect(10, 15, 100, 40,
                     BLACK);
@@ -95,9 +91,6 @@ void loop() {
 
   if (M5.Btn.pressedFor(2000)) {
       runCalibration();
-  } else if (M5.Btn.wasReleased()) {
-      USBSerial.print('A');
-      M5.Lcd.print("A");
   }
 }
 
@@ -143,7 +136,5 @@ void runCalibration() {
   delay(2000);
 
   M5.Lcd.fillScreen(BLACK);
-  M5.Lcd.setCursor(0,0);
-  M5.Lcd.println("TEST"); // Restore initial screen message
 }
 
