@@ -81,7 +81,11 @@ void loop() {
     canvas.setTextSize(2);
     canvas.drawString("Set Declination", canvas.width() / 2, 40);
     canvas.setTextSize(5);
-    canvas.drawString(String(magneticDeclination) + String((char)0xDF) + String((char)0xF7), canvas.width() / 2, 85);
+    String decl_str = String(magneticDeclination);
+    canvas.drawString(decl_str, canvas.width() / 2, 85);
+    int numWidth = canvas.textWidth(decl_str);
+    // Draw a circle for the degree symbol
+    canvas.drawCircle(canvas.width() / 2 + numWidth / 2 + 6, 85 - (8*5)/2 + 4, 4, WHITE);
     canvas.pushSprite(0, 0);
 
     if (millis() - lastDeclinationSetTime > 2000) {
@@ -117,12 +121,16 @@ void loop() {
       canvas.fillSprite(BLACK);
 
       // Status bar for calibration
-      String calStatus = "CALIBRATED " + String(magneticDeclination) + String((char)0xDF) + String((char)0xF7);
       if (offsetX != 0 || offsetY != 0 || offsetZ != 0) {
           canvas.setTextSize(1);
           canvas.setTextColor(GREEN);
           canvas.setTextDatum(TC_DATUM); // Top-Center datum
-          canvas.drawString(calStatus, canvas.width() / 2, 2);
+          String calStatusText = "CALIBRATED " + String(magneticDeclination);
+          int textWidth = canvas.textWidth(calStatusText);
+          // Draw text shifted left to make space for the circle, keeping the group centered
+          canvas.drawString(calStatusText, canvas.width() / 2 - 3, 2);
+          // Draw a circle for the degree symbol
+          canvas.drawCircle(canvas.width() / 2 + textWidth / 2, 4, 2, GREEN);
       } else {
           canvas.setTextSize(1);
           canvas.setTextColor(RED);
