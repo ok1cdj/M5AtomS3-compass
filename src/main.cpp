@@ -120,9 +120,12 @@ void runCalibration() {
   int minZ = 32767, maxZ = -32767;
 
   canvas.fillSprite(RED);
-  canvas.setTextSize(2);
   canvas.setTextDatum(MC_DATUM);
-  canvas.drawString("CALIBRATING...", canvas.width() / 2, canvas.height() / 2);
+  canvas.setTextSize(3);
+  canvas.drawString("CAL", canvas.width() / 2, 40);
+  canvas.setTextSize(2);
+  canvas.drawString("Rotate", canvas.width() / 2, 75);
+  canvas.drawString("Device", canvas.width() / 2, 95);
   canvas.pushSprite(0, 0);
 
   unsigned long startTime = millis();
