@@ -89,7 +89,7 @@ void loop() {
     canvas.pushSprite(0, 0);
   }
 
-  if (M5.Btn.pressedFor(2000)) {
+  if (M5.BtnA.pressedFor(2000)) {
       runCalibration();
   }
 }
