@@ -10,6 +10,8 @@ base_size = 24 + 2 * wall_thickness;
 // Montážní otvory M3 pro Atomic Proto (rozteč 16mm)
 mount_hole_spacing = 16;
 mount_hole_dia = 3.2;       // Pro M3 šrouby s tolerancí
+screw_head_dia = 5.3;       // Průměr hlavy šroubu M3
+screw_head_height = 3;      // Výška hlavy šroubu M3
 
 // Otvory pro stahovací pásky
 zip_tie_hole_dia = 4;
@@ -40,6 +42,12 @@ difference() {
         cylinder(d=mount_hole_dia, h=wall_thickness+2);
     translate([-mount_hole_spacing/2, 0, -1])
         cylinder(d=mount_hole_dia, h=wall_thickness+2);
+
+    // Zapuštění pro hlavy šroubů
+    translate([mount_hole_spacing/2, 0, wall_thickness - screw_head_height])
+        cylinder(d=screw_head_dia, h=screw_head_height);
+    translate([-mount_hole_spacing/2, 0, wall_thickness - screw_head_height])
+        cylinder(d=screw_head_dia, h=screw_head_height);
 
     // Otvory pro protažení stahovacích pásků
     translate([zip_tie_hole_spacing/2 - wall_thickness - zip_tie_hole_dia/2, 0, -pipe_diameter])
