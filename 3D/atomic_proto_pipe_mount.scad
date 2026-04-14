@@ -47,10 +47,10 @@ difference() {
         cylinder(d=mount_hole_dia, h = wall_thickness + pipe_diameter/2 + 2);
 
     // Zapuštění pro hlavy šroubů na spodní straně (u trubky)
-    translate([mount_hole_spacing/2, 0, hole_surface_z])
-        cylinder(d=screw_head_dia, h=screw_head_height);
-    translate([-mount_hole_spacing/2, 0, hole_surface_z])
-        cylinder(d=screw_head_dia, h=screw_head_height);
+    translate([mount_hole_spacing/2, 0, -pipe_diameter/2 - 1])
+        cylinder(d=screw_head_dia, h = hole_surface_z + screw_head_height + pipe_diameter/2 + 1);
+    translate([-mount_hole_spacing/2, 0, -pipe_diameter/2 - 1])
+        cylinder(d=screw_head_dia, h = hole_surface_z + screw_head_height + pipe_diameter/2 + 1);
 
     // Otvory pro protažení stahovacích pásků
     translate([zip_tie_hole_spacing/2 - wall_thickness - zip_tie_hole_dia/2, 0, -pipe_diameter])
