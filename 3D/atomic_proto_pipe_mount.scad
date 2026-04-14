@@ -37,16 +37,16 @@ difference() {
         rotate([90, 0, 0])
             cylinder(d=pipe_diameter, h=base_size+1, center=true);
 
-    // Montážní otvory pro Atomic Proto Kit (M3)
-    translate([mount_hole_spacing/2, 0, -1])
-        cylinder(d=mount_hole_dia, h=wall_thickness+2);
-    translate([-mount_hole_spacing/2, 0, -1])
-        cylinder(d=mount_hole_dia, h=wall_thickness+2);
+    // Montážní otvory pro Atomic Proto Kit (M3) - skrz celý díl
+    translate([mount_hole_spacing/2, 0, -pipe_diameter/2 - 1])
+        cylinder(d=mount_hole_dia, h = wall_thickness + pipe_diameter/2 + 2);
+    translate([-mount_hole_spacing/2, 0, -pipe_diameter/2 - 1])
+        cylinder(d=mount_hole_dia, h = wall_thickness + pipe_diameter/2 + 2);
 
-    // Zapuštění pro hlavy šroubů
-    translate([mount_hole_spacing/2, 0, wall_thickness - screw_head_height])
+    // Zapuštění pro hlavy šroubů na spodní straně (u trubky)
+    translate([mount_hole_spacing/2, 0, -pipe_diameter/2])
         cylinder(d=screw_head_dia, h=screw_head_height);
-    translate([-mount_hole_spacing/2, 0, wall_thickness - screw_head_height])
+    translate([-mount_hole_spacing/2, 0, -pipe_diameter/2])
         cylinder(d=screw_head_dia, h=screw_head_height);
 
     // Otvory pro protažení stahovacích pásků
