@@ -4,9 +4,10 @@ A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor.
 
 ## Features
 
-- Real-time display of compass heading.
+- Real-time, centered display of the compass heading.
 - On-device magnetometer calibration to compensate for magnetic distortions.
-- Calibration data is saved to non-volatile memory and loaded on startup.
+- Calibration data is saved to non-volatile memory and is loaded on startup.
+- Status bar that shows whether the device is calibrated.
 - Power optimization by disabling WiFi/Bluetooth and reducing CPU frequency.
 
 ## Hardware
@@ -45,7 +46,10 @@ The main dependencies are configured in `platformio.ini`:
 
 ### Operation
 
-Once powered on, the device will start displaying the current compass heading on the screen. The value is also printed to the USB Serial port for debugging.
+Once powered on, the device will start displaying the current compass heading. The display consists of:
+- A status bar at the top showing `CALIBRATED` (green) or `UNCALIBRATED` (red).
+- A static red triangular arrow below the status bar, which serves as a fixed pointer.
+- The numerical heading value in degrees, centered on the lower half of the screen.
 
 ### Calibration
 
