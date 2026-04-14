@@ -27,6 +27,8 @@ int magneticDeclination = 5;
 bool declinationMode = false;
 unsigned long lastDeclinationSetTime = 0;
 
+uint32_t pressStartTime = 0;
+
 void runCalibration(); // Forward declaration
 
 void readRawCompass(int* x, int* y, int* z) {
@@ -141,13 +143,20 @@ void loop() {
       canvas.pushSprite(0, 0);
     }
 
+    if (M5.BtnA.wasPressed()) {
+      pressStartTime = millis();
+    }
+
     if (M5.BtnA.wasReleased()) {
-      uint32_t pressed_ms = M5.BtnA.getPressedTime();
-      if (pressed_ms >= 5000) {
-        declinationMode = true;
-        lastDeclinationSetTime = millis();
-      } else if (pressed_ms >= 2000) {
-        runCalibration();
+      if (pressStartTime > 0) {
+        uint32_t pressed_ms = millis() - pressStartTime;
+        if (pressed_ms >= 5000) {
+          declinationMode = true;
+          lastDeclinationSetTime = millis();
+        } else if (pressed_ms >= 2000) {
+          runCalibration();
+        }
+        pressStartTime = 0;
       }
     }
   }
