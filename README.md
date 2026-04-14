@@ -15,6 +15,13 @@ A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor.
 - **M5AtomS3**
 - **QMC5883L Magnetometer Module**
 
+### 3D Printed Mount
+
+The repository includes a 3D model for a pipe mount designed for an M5Stack Atomic Proto Kit.
+
+- **File:** `3D/atomic_proto_pipe_mount.scad`
+- **Description:** A holder to mount the device on a 25mm diameter pipe. It uses M3 screws (16mm spacing) and zip ties. The design is in OpenSCAD.
+
 ### Wiring
 
 The QMC5883L module should be connected via I2C. The code is configured for the following GPIO pins on the M5AtomS3:
