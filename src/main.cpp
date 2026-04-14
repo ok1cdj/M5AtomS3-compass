@@ -141,11 +141,14 @@ void loop() {
       canvas.pushSprite(0, 0);
     }
 
-    if (M5.BtnA.pressedFor(5000)) {
+    if (M5.BtnA.wasReleased()) {
+      uint32_t pressed_ms = M5.BtnA.getPressedTime();
+      if (pressed_ms >= 5000) {
         declinationMode = true;
         lastDeclinationSetTime = millis();
-    } else if (M5.BtnA.pressedFor(2000)) {
+      } else if (pressed_ms >= 2000) {
         runCalibration();
+      }
     }
   }
 }

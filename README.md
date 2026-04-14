@@ -47,7 +47,7 @@ The main dependencies are configured in `platformio.ini`:
 ### Operation
 
 Once powered on, the device will start displaying the current compass heading. The display consists of:
-- A status bar at the top showing `CALIBRATED` (green) or `UNCALIBRATED` (red).
+- A status bar at the top showing `CALIBRATED` (green) with the current magnetic declination, or `UNCALIBRATED` (red).
 - A static red triangular arrow below the status bar, which serves as a fixed pointer.
 - The numerical heading value in degrees, centered on the lower half of the screen.
 
@@ -55,9 +55,19 @@ Once powered on, the device will start displaying the current compass heading. T
 
 To ensure accurate readings, it's crucial to calibrate the magnetometer. This process compensates for hard-iron distortions from nearby magnetic objects.
 
-1.  **Press and hold the built-in button for 2 seconds** to start the calibration mode. The screen will turn **RED**, and a "CALIBRATING..." message will appear.
+1.  **Press and hold the built-in button for 2 to 5 seconds, then release** to start the calibration mode. The screen will turn **RED**, and a "CALIBRATING..." message will appear.
 2.  For the next **15 seconds**, slowly rotate the device in all directions, making sure to cover all axes (like drawing a figure-eight in the air).
 3.  After 15 seconds, the calibration will complete automatically. The screen will turn **GREEN** to indicate success.
 4.  The calculated offsets are saved automatically and will be used for all subsequent measurements. The device will then return to normal operation.
 
 You should re-calibrate whenever the device's magnetic environment changes (e.g., if you mount it in a new location).
+
+### Magnetic Declination Setting
+
+Magnetic declination is the angle between magnetic north and true north. For accurate headings, you must set this for your location.
+
+1.  **Press and hold the built-in button for 5 seconds or more, then release** to enter declination setting mode.
+2.  The screen will show the current declination value.
+3.  **Short-press the button** to increment the value. It cycles from -10 to +10 degrees.
+4.  Once you have set the desired value, **wait for 2 seconds without pressing the button**.
+5.  The value will be saved automatically, and the compass will return to normal operation.
