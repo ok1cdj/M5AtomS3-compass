@@ -53,7 +53,7 @@ void setup() {
   compass.init();
   compass.setMagneticDeclination(5, 15);
   compass.setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
-  M5.Lcd.setRotation(2);
+  M5.Lcd.setRotation(0);
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
 }
 
@@ -82,10 +82,30 @@ void loop() {
     if (a < 0) a = a + 360;
 
     canvas.fillSprite(BLACK);
+
+    // Status bar for calibration
+    if (offsetX != 0 || offsetY != 0 || offsetZ != 0) {
+        canvas.setTextSize(1);
+        canvas.setTextColor(GREEN);
+        canvas.setTextDatum(TC_DATUM); // Top-Center datum
+        canvas.drawString("CALIBRATED", canvas.width() / 2, 2);
+    } else {
+        canvas.setTextSize(1);
+        canvas.setTextColor(RED);
+        canvas.setTextDatum(TC_DATUM); // Top-Center datum
+        canvas.drawString("UNCALIBRATED", canvas.width() / 2, 2);
+    }
+    canvas.setTextColor(WHITE); // Reset text color
+
+    // Red triangle arrow
+    int centerX = canvas.width() / 2;
+    canvas.fillTriangle(centerX, 25, centerX - 8, 40, centerX + 8, 40, RED);
+
+    // Centered degrees
     canvas.setTextSize(5);
-    canvas.setCursor(10, 15);
-    if (a < 100)  canvas.print(" ");
-    canvas.println(a);
+    canvas.setTextDatum(MC_DATUM); // Middle-Center datum
+    canvas.drawString(String(a), centerX, 85);
+
     canvas.pushSprite(0, 0);
   }
 
@@ -101,8 +121,8 @@ void runCalibration() {
 
   canvas.fillSprite(RED);
   canvas.setTextSize(2);
-  canvas.setCursor(5, 25);
-  canvas.println("CALIBRATING...");
+  canvas.setTextDatum(MC_DATUM);
+  canvas.drawString("CALIBRATING...", canvas.width() / 2, canvas.height() / 2);
   canvas.pushSprite(0, 0);
 
   unsigned long startTime = millis();
@@ -132,8 +152,8 @@ void runCalibration() {
   
   canvas.fillSprite(GREEN);
   canvas.setTextSize(2);
-  canvas.setCursor(35, 25);
-  canvas.println("DONE");
+  canvas.setTextDatum(MC_DATUM);
+  canvas.drawString("DONE", canvas.width() / 2, canvas.height() / 2);
   canvas.pushSprite(0, 0);
   delay(2000);
 
