@@ -19,6 +19,9 @@ zip_tie_hole_spacing = pipe_diameter + 12; // Vzdálenost otvorů od sebe
 
 $fn=64; // Rozlišení modelu
 
+// Vypočtená hodnota Z pro povrch držáku v místě díry (na vnitřní straně objímky)
+hole_surface_z = -pipe_diameter/2 + sqrt(pow(pipe_diameter/2, 2) - pow(mount_hole_spacing/2, 2));
+
 // --- Model ---
 difference() {
     // Hlavní tělo (základna + objímka)
@@ -44,9 +47,9 @@ difference() {
         cylinder(d=mount_hole_dia, h = wall_thickness + pipe_diameter/2 + 2);
 
     // Zapuštění pro hlavy šroubů na spodní straně (u trubky)
-    translate([mount_hole_spacing/2, 0, -pipe_diameter/2])
+    translate([mount_hole_spacing/2, 0, hole_surface_z])
         cylinder(d=screw_head_dia, h=screw_head_height);
-    translate([-mount_hole_spacing/2, 0, -pipe_diameter/2])
+    translate([-mount_hole_spacing/2, 0, hole_surface_z])
         cylinder(d=screw_head_dia, h=screw_head_height);
 
     // Otvory pro protažení stahovacích pásků
