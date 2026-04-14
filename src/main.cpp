@@ -81,7 +81,7 @@ void loop() {
     canvas.setTextSize(2);
     canvas.drawString("Set Declination", canvas.width() / 2, 40);
     canvas.setTextSize(5);
-    canvas.drawString(String(magneticDeclination) + "o", canvas.width() / 2, 85);
+    canvas.drawString(String(magneticDeclination) + String((char)0xB0), canvas.width() / 2, 85);
     canvas.pushSprite(0, 0);
 
     if (millis() - lastDeclinationSetTime > 2000) {
@@ -117,7 +117,7 @@ void loop() {
       canvas.fillSprite(BLACK);
 
       // Status bar for calibration
-      String calStatus = "CALIBRATED " + String(magneticDeclination) + "o";
+      String calStatus = "CALIBRATED " + String(magneticDeclination) + String((char)0xB0);
       if (offsetX != 0 || offsetY != 0 || offsetZ != 0) {
           canvas.setTextSize(1);
           canvas.setTextColor(GREEN);
