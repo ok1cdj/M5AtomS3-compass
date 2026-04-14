@@ -1,10 +1,11 @@
 #include <Arduino.h>
-#include "M5AtomS3.h"
+#include <M5Unified.h>
 #include <QMC5883LCompass.h>
 #include <WiFi.h>
 #include "esp32-hal-cpu.h"
 #include <Preferences.h>
 
+static M5Canvas canvas(&M5.Lcd);
 QMC5883LCompass compass;
 Preferences preferences;
 
@@ -41,7 +42,7 @@ void setup() {
   WiFi.mode(WIFI_OFF);
   btStop();
   setCpuFrequencyMhz(80); //Set CPU clock to 80MHz fo example
-  M5.begin(true, true, true, false);  // Init AtomS3(Initialize LCD, serial port).
+  M5.begin();
   preferences.begin("compass", false);
   offsetX = preferences.getInt("offX", 0);
   offsetY = preferences.getInt("offY", 0);
@@ -53,8 +54,7 @@ void setup() {
   compass.setMagneticDeclination(5, 15);
   compass.setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
   M5.Lcd.setRotation(2);
-
-
+  canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
 }
 
 void loop() {
@@ -81,12 +81,12 @@ void loop() {
     a = a - 90;
     if (a < 0) a = a + 360;
 
-    M5.Lcd.setTextSize(5);
-    M5.Lcd.fillRect(10, 15, 100, 40,
-                    BLACK);
-    M5.Lcd.setCursor(10, 15);
-    if (a < 100)  M5.Lcd.print(" ");
-    M5.Lcd.println(a);
+    canvas.fillSprite(BLACK);
+    canvas.setTextSize(5);
+    canvas.setCursor(10, 15);
+    if (a < 100)  canvas.print(" ");
+    canvas.println(a);
+    canvas.pushSprite(0, 0);
   }
 
   if (M5.Btn.pressedFor(2000)) {
@@ -99,10 +99,11 @@ void runCalibration() {
   int minY = 32767, maxY = -32767;
   int minZ = 32767, maxZ = -32767;
 
-  M5.Lcd.fillScreen(RED);
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(5, 25);
-  M5.Lcd.println("CALIBRATING...");
+  canvas.fillSprite(RED);
+  canvas.setTextSize(2);
+  canvas.setCursor(5, 25);
+  canvas.println("CALIBRATING...");
+  canvas.pushSprite(0, 0);
 
   unsigned long startTime = millis();
   while (millis() - startTime < 15000) {
@@ -129,12 +130,14 @@ void runCalibration() {
   preferences.putInt("offZ", offsetZ);
   preferences.end();
   
-  M5.Lcd.fillScreen(GREEN);
-  M5.Lcd.setTextSize(2);
-  M5.Lcd.setCursor(35, 25);
-  M5.Lcd.println("DONE");
+  canvas.fillSprite(GREEN);
+  canvas.setTextSize(2);
+  canvas.setCursor(35, 25);
+  canvas.println("DONE");
+  canvas.pushSprite(0, 0);
   delay(2000);
 
-  M5.Lcd.fillScreen(BLACK);
+  canvas.fillSprite(BLACK);
+  canvas.pushSprite(0, 0);
 }
 

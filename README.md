@@ -32,7 +32,7 @@ The QMC5883L module should be connected via I2C. The code is configured for the 
 This project is built using the [PlatformIO IDE](https://platformio.org/).
 
 The main dependencies are configured in `platformio.ini`:
-- `m5stack/M5AtomS3`: For M5AtomS3 hardware control (LCD, Button).
+- `m5stack/M5Unified`: A comprehensive library for M5Stack devices, including M5GFX for display control.
 - `ok1cdj/QMC5883LCompass`: For interfacing with the QMC5883L sensor.
 
 ## How to Use
