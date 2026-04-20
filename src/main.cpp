@@ -151,6 +151,19 @@ void loop() {
     int numWidth = canvas.textWidth(decl_str);
     // Draw a circle for the degree symbol
     canvas.drawCircle(canvas.width() / 2 + numWidth / 2 + 6, 85 - (8*5)/2 + 4, 4, WHITE);
+
+    // WiFi status bar
+    canvas.setTextSize(1);
+    canvas.setTextDatum(BC_DATUM); // Bottom-Center datum
+    if (WiFi.status() == WL_CONNECTED) {
+        canvas.setTextColor(CYAN);
+        canvas.drawString(WiFi.localIP().toString(), canvas.width() / 2, canvas.height() - 2);
+    } else {
+        canvas.setTextColor(ORANGE);
+        canvas.drawString("WiFi Disconnected", canvas.width() / 2, canvas.height() - 2);
+    }
+    canvas.setTextColor(WHITE); // Reset text color
+
     canvas.pushSprite(0, 0);
 
     if (millis() - lastDeclinationSetTime > 2000) {
@@ -212,6 +225,18 @@ void loop() {
       canvas.setTextSize(5);
       canvas.setTextDatum(MC_DATUM); // Middle-Center datum
       canvas.drawString(String(a), centerX, 85);
+
+      // WiFi status bar
+      canvas.setTextSize(1);
+      canvas.setTextDatum(BC_DATUM); // Bottom-Center datum
+      if (WiFi.status() == WL_CONNECTED) {
+          canvas.setTextColor(CYAN);
+          canvas.drawString(WiFi.localIP().toString(), canvas.width() / 2, canvas.height() - 2);
+      } else {
+          canvas.setTextColor(ORANGE);
+          canvas.drawString("WiFi Disconnected", canvas.width() / 2, canvas.height() - 2);
+      }
+      canvas.setTextColor(WHITE); // Reset text color
 
       canvas.pushSprite(0, 0);
       ws.textAll(String(a));

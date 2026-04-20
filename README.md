@@ -54,9 +54,10 @@ The main dependencies are configured in `platformio.ini`:
 ### Operation
 
 Once powered on, the device will start displaying the current compass heading. The display consists of:
-- A status bar at the top showing `CALIBRATED` (green) with the current magnetic declination, or `UNCALIBRATED` (red).
+- A top status bar showing `CALIBRATED` (green) with the current magnetic declination, or `UNCALIBRATED` (red).
 - A static red triangular arrow below the status bar, which serves as a fixed pointer.
-- The numerical heading value in degrees, centered on the lower half of the screen.
+- The numerical heading value in degrees, centered on the middle of the screen.
+- A bottom status bar showing the WiFi connection status and IP address (cyan) or a disconnected message (orange).
 
 ### Calibration
 
