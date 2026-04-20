@@ -47,9 +47,9 @@ difference() {
         cylinder(d=mount_hole_dia, h = wall_thickness + pipe_diameter/2 + 2);
 
     // Countersink for screw heads on the bottom side (by the pipe)
-    translate([mount_hole_spacing/2, 0, -pipe_diameter/2 - 0])
+    translate([mount_hole_spacing/2, 0, -pipe_diameter/2 - 1])
         cylinder(d=screw_head_dia, h = hole_surface_z + screw_head_height + pipe_diameter/2 + 1);
-    #translate([-mount_hole_spacing/2, 0, -pipe_diameter/2 - 0])
+    translate([-mount_hole_spacing/2, 0, -pipe_diameter/2 - 1])
         cylinder(d=screw_head_dia, h = hole_surface_z + screw_head_height + pipe_diameter/2 + 1);
 
     // Holes for zip ties

@@ -11,7 +11,7 @@
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
-const char index_html[] PROGMEM = R"rawliteral(
+const char index_html[] = R"rawliteral(
 <!DOCTYPE HTML><html>
 <head>
   <title>M5AtomS3 Compass</title>
