@@ -2,8 +2,57 @@
 #include <M5Unified.h>
 #include <QMC5883LCompass.h>
 #include <WiFi.h>
+#include <WiFiManager.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #include "esp32-hal-cpu.h"
 #include <Preferences.h>
+
+AsyncWebServer server(80);
+AsyncWebSocket ws("/ws");
+
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<head>
+  <title>M5AtomS3 Compass</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html { font-family: Arial; display: inline-block; text-align: center; }
+    h1 { font-size: 3.0rem; }
+    p { font-size: 1.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Azimuth</h1>
+  <p><span id="azimuthValue">...</span>&deg;</p>
+  <script>
+    var gateway = `ws://${window.location.hostname}/ws`;
+    var websocket;
+    function initWebSocket() {
+      console.log('Trying to open a WebSocket connection...');
+      websocket = new WebSocket(gateway);
+      websocket.onopen    = onOpen;
+      websocket.onclose   = onClose;
+      websocket.onmessage = onMessage;
+    }
+    function onOpen(event) {
+      console.log('Connection opened');
+    }
+    function onClose(event) {
+      console.log('Connection closed');
+      setTimeout(initWebSocket, 2000);
+    }
+    function onMessage(event) {
+      document.getElementById('azimuthValue').innerHTML = event.data;
+    }
+    window.addEventListener('load', onLoad);
+    function onLoad(event) {
+      initWebSocket();
+    }
+  </script>
+</body>
+</html>
+)rawliteral";
 
 static M5Canvas canvas(&M5.Lcd);
 QMC5883LCompass compass;
@@ -29,6 +78,10 @@ unsigned long lastDeclinationSetTime = 0;
 
 uint32_t pressStartTime = 0;
 
+void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  // We don't need to handle any events from the client side for this project
+}
+
 void runCalibration(); // Forward declaration
 
 void readRawCompass(int* x, int* y, int* z) {
@@ -45,10 +98,13 @@ void readRawCompass(int* x, int* y, int* z) {
 }
 
 void setup() {
-  WiFi.mode(WIFI_OFF);
   btStop();
   setCpuFrequencyMhz(80); //Set CPU clock to 80MHz fo example
   M5.begin();
+
+  WiFiManager wm;
+  wm.autoConnect("Compass_Setup");
+
   preferences.begin("compass", false);
   offsetX = preferences.getInt("offX", 0);
   offsetY = preferences.getInt("offY", 0);
@@ -61,6 +117,15 @@ void setup() {
   compass.setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
   M5.Lcd.setRotation(0);
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
+
+  ws.onEvent(onWsEvent);
+  server.addHandler(&ws);
+
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", index_html);
+  });
+
+  server.begin();
 }
 
 void loop() {
@@ -149,7 +214,10 @@ void loop() {
       canvas.drawString(String(a), centerX, 85);
 
       canvas.pushSprite(0, 0);
+      ws.textAll(String(a));
     }
+
+    ws.cleanupClients();
 
     if (M5.BtnA.wasPressed()) {
       pressStartTime = millis();
