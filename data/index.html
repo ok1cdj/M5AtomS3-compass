@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>M5AtomS3 Compass</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            overflow: hidden;
+        }
+        #azimuth-container {
+            position: relative;
+        }
+        #azimuthValue {
+            font-size: 15vmin;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        #degreeSymbol {
+            font-size: 8vmin;
+            position: absolute;
+            top: 0;
+            right: -5vmin;
+        }
+    </style>
+</head>
+<body>
+    <div id="azimuth-container">
+        <span id="azimuthValue">...</span>
+        <span id="degreeSymbol">&deg;</span>
+    </div>
+
+    <script>
+        var gateway = `ws://${window.location.hostname}/ws`;
+        var websocket;
+
+        function initWebSocket() {
+            console.log('Trying to open a WebSocket connection...');
+            websocket = new WebSocket(gateway);
+            websocket.onopen = onOpen;
+            websocket.onclose = onClose;
+            websocket.onmessage = onMessage;
+        }
+
+        function onOpen(event) {
+            console.log('Connection opened');
+        }
+
+        function onClose(event) {
+            console.log('Connection closed');
+            setTimeout(initWebSocket, 2000);
+        }
+
+        function onMessage(event) {
+            document.getElementById('azimuthValue').innerHTML = event.data;
+        }
+
+        window.addEventListener('load', initWebSocket);
+    </script>
+</body>
+</html>

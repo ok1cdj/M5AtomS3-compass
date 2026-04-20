@@ -7,52 +7,10 @@
 #include <ESPAsyncWebServer.h>
 #include "esp32-hal-cpu.h"
 #include <Preferences.h>
+#include <LittleFS.h>
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
-
-const char index_html[] = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <title>M5AtomS3 Compass</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    html { font-family: Arial; display: inline-block; text-align: center; }
-    h1 { font-size: 3.0rem; }
-    p { font-size: 1.5rem; }
-  </style>
-</head>
-<body>
-  <h1>Azimuth</h1>
-  <p><span id="azimuthValue">...</span>&deg;</p>
-  <script>
-    var gateway = `ws://${window.location.hostname}/ws`;
-    var websocket;
-    function initWebSocket() {
-      console.log('Trying to open a WebSocket connection...');
-      websocket = new WebSocket(gateway);
-      websocket.onopen    = onOpen;
-      websocket.onclose   = onClose;
-      websocket.onmessage = onMessage;
-    }
-    function onOpen(event) {
-      console.log('Connection opened');
-    }
-    function onClose(event) {
-      console.log('Connection closed');
-      setTimeout(initWebSocket, 2000);
-    }
-    function onMessage(event) {
-      document.getElementById('azimuthValue').innerHTML = event.data;
-    }
-    window.addEventListener('load', onLoad);
-    function onLoad(event) {
-      initWebSocket();
-    }
-  </script>
-</body>
-</html>
-)rawliteral";
 
 static M5Canvas canvas(&M5.Lcd);
 QMC5883LCompass compass;
@@ -82,6 +40,17 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
   // We don't need to handle any events from the client side for this project
 }
 
+void configModeCallback(WiFiManager *myWiFiManager) {
+  canvas.fillSprite(BLACK);
+  canvas.setTextDatum(MC_DATUM);
+  canvas.setTextSize(2);
+  canvas.drawString("WiFi Config", canvas.width() / 2, 40);
+  canvas.setTextSize(1);
+  canvas.drawString("Connect to AP:", canvas.width() / 2, 70);
+  canvas.drawString(myWiFiManager->getConfigPortalSSID().c_str(), canvas.width() / 2, 90);
+  canvas.pushSprite(0, 0);
+}
+
 void runCalibration(); // Forward declaration
 
 void readRawCompass(int* x, int* y, int* z) {
@@ -101,9 +70,21 @@ void setup() {
   btStop();
   setCpuFrequencyMhz(80); //Set CPU clock to 80MHz fo example
   M5.begin();
-
+  canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
+  
   WiFiManager wm;
+  wm.setAPCallback(configModeCallback);
   wm.autoConnect("Compass_Setup");
+  
+  canvas.fillSprite(BLACK); // Clear config message
+  canvas.pushSprite(0,0);
+
+  if(!LittleFS.begin(true)){
+    canvas.setTextDatum(MC_DATUM);
+    canvas.drawString("LittleFS Error", canvas.width() / 2, canvas.height() / 2);
+    canvas.pushSprite(0,0);
+    return;
+  }
 
   preferences.begin("compass", false);
   offsetX = preferences.getInt("offX", 0);
@@ -116,13 +97,12 @@ void setup() {
   compass.init();
   compass.setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
   M5.Lcd.setRotation(0);
-  canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
 
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/html", index_html);
+    request->send(LittleFS, "/index.html", "text/html");
   });
 
   server.begin();
