@@ -2,7 +2,7 @@
 
 // --- Parameters ---
 pipe_diameter = 25;         // Pipe diameter
-wall_thickness = 3;         // Wall thickness
+wall_thickness = 4;         // Wall thickness
 
 // Base dimensions for Atomic Proto Kit (24x24mm)
 base_size = 24 + 2 * wall_thickness;
@@ -47,9 +47,9 @@ difference() {
         cylinder(d=mount_hole_dia, h = wall_thickness + pipe_diameter/2 + 2);
 
     // Countersink for screw heads on the bottom side (by the pipe)
-    translate([mount_hole_spacing/2, 0, -pipe_diameter/2 - 1])
+    translate([mount_hole_spacing/2, 0, -pipe_diameter/2 - 0])
         cylinder(d=screw_head_dia, h = hole_surface_z + screw_head_height + pipe_diameter/2 + 1);
-    translate([-mount_hole_spacing/2, 0, -pipe_diameter/2 - 1])
+    #translate([-mount_hole_spacing/2, 0, -pipe_diameter/2 - 0])
         cylinder(d=screw_head_dia, h = hole_surface_z + screw_head_height + pipe_diameter/2 + 1);
 
     // Holes for zip ties
