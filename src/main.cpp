@@ -84,7 +84,7 @@ void setup() {
 
   Wire1.begin(38, 39);
   compass.init();
-  compass->setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
+  compass.setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
   M5.Lcd.setRotation(0);
 
   ws.onEvent(onWsEvent);
