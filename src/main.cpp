@@ -214,8 +214,8 @@ void loop() {
       M5.Imu.getAccelData(&accX, &accY, &accZ);
 
       // Elevation and roll in radians for tilt compensation
-      float elevation_rad = atan2(-accX, sqrt(accY * accY + accZ * accZ));
-      float roll_rad = atan2(accY, accZ);
+      float roll_rad = atan2(-accX, sqrt(accY * accY + accZ * accZ));
+      float elevation_rad = atan2(accY, accZ);
 
       // Convert to degrees for display/debug
       float elevation = elevation_rad * 180.0 / M_PI;
