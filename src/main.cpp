@@ -296,6 +296,21 @@ void runCalibration() {
   preferences.putInt("offZ", offsetZ);
   preferences.end();
   
+  // --- IMU Gyro Calibration Step ---
+  canvas.fillSprite(BLUE);
+  canvas.setTextDatum(MC_DATUM);
+  canvas.setTextSize(2);
+  canvas.drawString("Place device", canvas.width() / 2, 45);
+  canvas.drawString("still & flat", canvas.width() / 2, 75);
+  canvas.pushSprite(0, 0);
+  delay(3000);
+
+  canvas.fillSprite(BLUE);
+  canvas.drawString("Calibrating", canvas.width() / 2, 45);
+  canvas.drawString("Gyro...", canvas.width() / 2, 75);
+  canvas.pushSprite(0, 0);
+  M5.Imu.calibrate();
+
   canvas.fillSprite(GREEN);
   canvas.setTextSize(2);
   canvas.setTextDatum(MC_DATUM);

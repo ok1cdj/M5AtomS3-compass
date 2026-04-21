@@ -5,7 +5,7 @@ A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor.
 ## Features
 
 - Real-time, centered display of the compass heading.
-- On-device magnetometer calibration to compensate for magnetic distortions.
+- On-device calibration for both magnetometer (hard-iron) and gyroscope (drift).
 - Calibration data is saved to non-volatile memory and is loaded on startup.
 - Status bar that shows whether the device is calibrated.
 - Power optimization by disabling WiFi/Bluetooth and reducing CPU frequency.
@@ -61,12 +61,17 @@ Once powered on, the device will start displaying the current compass heading. T
 
 ### Calibration
 
-To ensure accurate readings, it's crucial to calibrate the magnetometer. This process compensates for hard-iron distortions from nearby magnetic objects.
+To ensure accurate readings, it's crucial to calibrate both the magnetometer and the gyroscope. This process has two stages.
 
-1.  **Press and hold the built-in button for 2 to 5 seconds, then release** to start the calibration mode. The screen will turn **RED**, and a "CALIBRATING..." message will appear.
-2.  For the next **15 seconds**, slowly rotate the device in all directions, making sure to cover all axes (like drawing a figure-eight in the air).
-3.  After 15 seconds, the calibration will complete automatically. The screen will turn **GREEN** to indicate success.
-4.  The calculated offsets are saved automatically and will be used for all subsequent measurements. The device will then return to normal operation.
+1.  **Press and hold the built-in button for 2 to 5 seconds, then release** to start the calibration mode.
+
+**Stage 1: Magnetometer Calibration**
+1.  The screen will turn **RED**. For the next **15 seconds**, slowly rotate the device in all directions, making sure to cover all axes (like drawing a figure-eight in the air). This compensates for magnetic distortions.
+
+**Stage 2: Gyroscope Calibration**
+1.  After the magnetometer calibration, the screen will turn **BLUE** and prompt you to place the device on a still, flat surface.
+2.  Place the device down and wait. The device will automatically calibrate the gyroscope to remove any drift.
+3.  Once both stages are complete, the screen will turn **GREEN** to indicate success. The calculated offsets are saved, and the device will return to normal operation.
 
 You should re-calibrate whenever the device's magnetic environment changes (e.g., if you mount it in a new location).
 
