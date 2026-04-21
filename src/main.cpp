@@ -309,7 +309,22 @@ void runCalibration() {
   canvas.drawString("Calibrating", canvas.width() / 2, 45);
   canvas.drawString("Gyro...", canvas.width() / 2, 75);
   canvas.pushSprite(0, 0);
-  M5.Imu.calibrate();
+  
+  // Manual Gyro Calibration
+  long gx_sum = 0, gy_sum = 0, gz_sum = 0;
+  const int num_samples = 500;
+  for (int i = 0; i < num_samples; i++) {
+    gx_sum += M5.Imu.getGyroAdc(m5::ax_t::ax_x);
+    gy_sum += M5.Imu.getGyroAdc(m5::ax_t::ax_y);
+    gz_sum += M5.Imu.getGyroAdc(m5::ax_t::ax_z);
+    delay(5);
+  }
+  
+  int32_t gx_bias = gx_sum / num_samples;
+  int32_t gy_bias = gy_sum / num_samples;
+  int32_t gz_bias = gz_sum / num_samples;
+  
+  M5.Imu.setGyroBias(gx_bias, gy_bias, gz_bias);
 
   canvas.fillSprite(GREEN);
   canvas.setTextSize(2);
