@@ -86,7 +86,6 @@ void setup() {
   btStop();
   setCpuFrequencyMhz(80); //Set CPU clock to 80MHz fo example
   M5.begin();
-  M5.Log.begin(115200);
   M5.Log.println("Starting setup...");
   M5.Imu.loadOffsetFromNVS();
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
