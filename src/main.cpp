@@ -198,7 +198,6 @@ void loop() {
       
       a = round(heading * 180 / M_PI);
       
-	  previousMillis = currentMillis;
       a = a - 90;
       if (a < 0) a = a + 360;
 
@@ -260,6 +259,7 @@ void loop() {
       canvas.pushSprite(0, 0);
       String json_data = "{\"azimuth\":" + String(a) + ", \"pitch\":" + String((int)pitch) + ", \"roll\":" + String((int)roll) + "}";
       ws.textAll(json_data);
+      previousMillis = currentMillis;
     }
 
     ws.cleanupClients();
