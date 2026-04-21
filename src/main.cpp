@@ -208,6 +208,8 @@ void loop() {
       a = a - 90;
       if (a < 0) a = a + 360;
 
+      M5.Log.printf("Calculated Azimuth: %d\n", a);
+
       canvas.fillSprite(BLACK);
 
       // Status bar for calibration
