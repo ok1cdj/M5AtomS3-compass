@@ -53,19 +53,6 @@ void configModeCallback(WiFiManager *myWiFiManager) {
 
 void runCalibration(); // Forward declaration
 
-void readRawCompass(int* x, int* y, int* z) {
-  Wire.beginTransmission(0x0D);
-  Wire.write(0x00);
-  Wire.endTransmission();
-
-  Wire.requestFrom(0x0D, 6);
-  if (Wire.available() >= 6) {
-    *x = (int16_t)(Wire.read() | (Wire.read() << 8));
-    *y = (int16_t)(Wire.read() | (Wire.read() << 8));
-    *z = (int16_t)(Wire.read() | (Wire.read() << 8));
-  }
-}
-
 void setup() {
   btStop();
   setCpuFrequencyMhz(80); //Set CPU clock to 80MHz fo example
@@ -161,8 +148,11 @@ void loop() {
     if (currentMillis - previousMillis > interval)
     {
       M5.Imu.update();
-      int rawX, rawY, rawZ;
-      readRawCompass(&rawX, &rawY, &rawZ);
+      
+      compass.read();
+      int rawX = compass.getX();
+      int rawY = compass.getY();
+      int rawZ = compass.getZ();
 
       float accX, accY, accZ;
       M5.Imu.getAccelData(&accX, &accY, &accZ);
@@ -215,17 +205,17 @@ void loop() {
       canvas.drawString(String(a), centerX, 75);
 
       // Pitch & Roll values
-      canvas.setTextSize(2);
+      canvas.setTextSize(1);
 
       String pitch_str = "Pitch: " + String((int)pitch);
-      canvas.drawString(pitch_str, centerX, 100);
+      canvas.drawString(pitch_str, centerX, 105);
       int pitchTextWidth = canvas.textWidth(pitch_str);
-      canvas.drawCircle(centerX + pitchTextWidth/2 + 2, 100 - 7, 2, WHITE);
+      canvas.drawCircle(centerX + pitchTextWidth/2 + 3, 105 - 3, 1, WHITE);
 
       String roll_str = "Roll: " + String((int)roll);
       canvas.drawString(roll_str, centerX, 115);
       int rollTextWidth = canvas.textWidth(roll_str);
-      canvas.drawCircle(centerX + rollTextWidth/2 + 2, 115 - 7, 2, WHITE);
+      canvas.drawCircle(centerX + rollTextWidth/2 + 3, 115 - 3, 1, WHITE);
 
       // WiFi status bar
       canvas.setTextSize(1);
@@ -281,8 +271,10 @@ void runCalibration() {
 
   unsigned long startTime = millis();
   while (millis() - startTime < 15000) {
-    int rawX, rawY, rawZ;
-    readRawCompass(&rawX, &rawY, &rawZ);
+    compass.read();
+    int rawX = compass.getX();
+    int rawY = compass.getY();
+    int rawZ = compass.getZ();
 
     if (rawX < minX) minX = rawX;
     if (rawX > maxX) maxX = rawX;
