@@ -31,7 +31,24 @@ unsigned long lastDeclinationSetTime = 0;
 uint32_t pressStartTime = 0;
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-  // We don't need to handle any events from the client side for this project
+  if (type == WS_EVT_DATA) {
+    AwsFrameInfo *info = (AwsFrameInfo*)arg;
+    if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
+      data[len] = 0; // Null-terminate
+      String message = (char*)data;
+      if (message.startsWith("decl:")) {
+        int decl = message.substring(5).toInt();
+        // Basic validation for declination
+        if (decl >= -90 && decl <= 90) { 
+          magneticDeclination = decl;
+          preferences.begin("compass", false);
+          preferences.putInt("decl", magneticDeclination);
+          preferences.end();
+          M5.Log.printf("Declination set to %d via WebSocket\n", magneticDeclination);
+        }
+      }
+    }
+  }
 }
 
 void configModeCallback(WiFiManager *myWiFiManager) {
@@ -192,12 +209,12 @@ void loop() {
       float accX, accY, accZ;
       M5.Imu.getAccelData(&accX, &accY, &accZ);
 
-      // Pitch and roll in radians for tilt compensation
-      float pitch_rad = atan2(-accX, sqrt(accY * accY + accZ * accZ));
+      // Elevation and roll in radians for tilt compensation
+      float elevation_rad = atan2(-accX, sqrt(accY * accY + accZ * accZ));
       float roll_rad = atan2(accY, accZ);
 
-      // Convert to degrees for display
-      float pitch = pitch_rad * 180.0 / M_PI;
+      // Convert to degrees for display/debug
+      float elevation = elevation_rad * 180.0 / M_PI;
       float roll = roll_rad * 180.0 / M_PI;
 
       // Apply calibration offsets
@@ -206,8 +223,8 @@ void loop() {
       float cal_mag_z = rawZ - offsetZ;
       
       // Tilt compensation
-      float comp_x = cal_mag_x * cos(pitch_rad) + cal_mag_z * sin(pitch_rad);
-      float comp_y = cal_mag_x * sin(roll_rad) * sin(pitch_rad) + cal_mag_y * cos(roll_rad) - cal_mag_z * sin(roll_rad) * cos(pitch_rad);
+      float comp_x = cal_mag_x * cos(elevation_rad) + cal_mag_z * sin(elevation_rad);
+      float comp_y = cal_mag_x * sin(roll_rad) * sin(elevation_rad) + cal_mag_y * cos(roll_rad) - cal_mag_z * sin(roll_rad) * cos(elevation_rad);
 
       // Return Azimuth reading
       float heading = atan2(comp_y, comp_x);
@@ -222,7 +239,7 @@ void loop() {
       a = a - 90;
       if (a < 0) a = a + 360;
 
-      M5.Log.printf("Calculated Azimuth: %d\n", a);
+      M5.Log.printf("Calculated Azimuth: %d, Elevation: %.1f\n", a, elevation);
 
       canvas.fillSprite(BLACK);
 
@@ -254,18 +271,13 @@ void loop() {
       canvas.setTextDatum(MC_DATUM); // Middle-Center datum
       canvas.drawString(String(a), centerX, 75);
 
-      // Pitch & Roll values
+      // Roll value
       canvas.setTextSize(1);
 
-      String pitch_str = "Pitch: " + String((int)pitch);
-      canvas.drawString(pitch_str, centerX, 105);
-      int pitchTextWidth = canvas.textWidth(pitch_str);
-      canvas.drawCircle(centerX + pitchTextWidth/2 + 3, 105 - 3, 1, WHITE);
-
       String roll_str = "Roll: " + String((int)roll);
-      canvas.drawString(roll_str, centerX, 115);
+      canvas.drawString(roll_str, centerX, 105);
       int rollTextWidth = canvas.textWidth(roll_str);
-      canvas.drawCircle(centerX + rollTextWidth/2 + 3, 115 - 3, 1, WHITE);
+      canvas.drawCircle(centerX + rollTextWidth/2 + 3, 105 - 3, 1, WHITE);
 
       // WiFi status bar
       canvas.setTextSize(1);
@@ -280,7 +292,7 @@ void loop() {
       canvas.setTextColor(WHITE); // Reset text color
 
       canvas.pushSprite(0, 0);
-      String json_data = "{\"azimuth\":" + String(a) + ", \"pitch\":" + String((int)pitch) + ", \"roll\":" + String((int)roll) + "}";
+      String json_data = "{\"azimuth\":" + String(a) + ", \"roll\":" + String((int)roll) + "}";
       ws.textAll(json_data);
       previousMillis = currentMillis;
     }

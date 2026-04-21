@@ -51,11 +51,13 @@
             <span id="azimuthValue">...</span>
             <span id="degreeSymbol">&deg;</span>
         </div>
-        <div id="pitch-container" class="imu-container">
-            Pitch: <span id="pitchValue">...</span><span class="imu-degree-symbol">&deg;</span>
-        </div>
         <div id="roll-container" class="imu-container">
             Roll: <span id="rollValue">...</span><span class="imu-degree-symbol">&deg;</span>
+        </div>
+        <div class="imu-container">
+            Declination:
+            <input type="number" id="declinationInput" value="5" style="width: 4em; background-color: #1a1a1a; color: #33FF33; border: 1px solid #33FF33; font-family: inherit; font-size: inherit; text-align: center;">
+            <button id="setDeclinationBtn" style="background-color: #333; color: #33FF33; border: 1px solid #33FF33; font-family: inherit; font-size: inherit;">Set</button>
         </div>
     </div>
 
@@ -84,14 +86,22 @@
             try {
                 const data = JSON.parse(event.data);
                 document.getElementById('azimuthValue').innerHTML = data.azimuth;
-                document.getElementById('pitchValue').innerHTML = data.pitch;
                 document.getElementById('rollValue').innerHTML = data.roll;
             } catch (e) {
                 console.error('Error parsing JSON:', e);
             }
         }
 
-        window.addEventListener('load', initWebSocket);
+        function setDeclination() {
+            const declinationValue = document.getElementById('declinationInput').value;
+            console.log('Sending declination:', declinationValue);
+            websocket.send('decl:' + declinationValue);
+        }
+
+        window.addEventListener('load', () => {
+            initWebSocket();
+            document.getElementById('setDeclinationBtn').addEventListener('click', setDeclination);
+        });
     </script>
 </body>
 </html>
