@@ -46,18 +46,14 @@
     </style>
 </head>
 <body>
+    <a href="/settings" style="position: absolute; top: 20px; right: 20px; font-size: 8vmin; color: #33FF33; text-decoration: none;">&#9881;</a>
     <div id="container">
         <div id="azimuth-container">
             <span id="azimuthValue">...</span>
             <span id="degreeSymbol">&deg;</span>
         </div>
-        <div id="roll-container" class="imu-container">
-            Roll: <span id="rollValue">...</span><span class="imu-degree-symbol">&deg;</span>
-        </div>
-        <div class="imu-container">
-            Declination:
-            <input type="number" id="declinationInput" value="5" style="width: 4em; background-color: #1a1a1a; color: #33FF33; border: 1px solid #33FF33; font-family: inherit; font-size: inherit; text-align: center;">
-            <button id="setDeclinationBtn" style="background-color: #333; color: #33FF33; border: 1px solid #33FF33; font-family: inherit; font-size: inherit;">Set</button>
+        <div id="elev-container" class="imu-container">
+            Elev: <span id="elevValue">...</span><span class="imu-degree-symbol">&deg;</span>
         </div>
     </div>
 
@@ -86,22 +82,13 @@
             try {
                 const data = JSON.parse(event.data);
                 document.getElementById('azimuthValue').innerHTML = data.azimuth;
-                document.getElementById('rollValue').innerHTML = data.roll;
+                document.getElementById('elevValue').innerHTML = data.elev;
             } catch (e) {
                 console.error('Error parsing JSON:', e);
             }
         }
 
-        function setDeclination() {
-            const declinationValue = document.getElementById('declinationInput').value;
-            console.log('Sending declination:', declinationValue);
-            websocket.send('decl:' + declinationValue);
-        }
-
-        window.addEventListener('load', () => {
-            initWebSocket();
-            document.getElementById('setDeclinationBtn').addEventListener('click', setDeclination);
-        });
+        window.addEventListener('load', initWebSocket);
     </script>
 </body>
 </html>

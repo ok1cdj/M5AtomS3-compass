@@ -146,6 +146,10 @@ void setup() {
     request->send(LittleFS, "/index.html", "text/html");
   });
 
+  server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/settings.html", "text/html");
+  });
+
   server.begin();
 }
 
@@ -271,13 +275,10 @@ void loop() {
       canvas.setTextDatum(MC_DATUM); // Middle-Center datum
       canvas.drawString(String(a), centerX, 75);
 
-      // Roll value
-      canvas.setTextSize(1);
-
-      String roll_str = "Roll: " + String((int)roll);
-      canvas.drawString(roll_str, centerX, 105);
-      int rollTextWidth = canvas.textWidth(roll_str);
-      canvas.drawCircle(centerX + rollTextWidth/2 + 3, 105 - 3, 1, WHITE);
+      // Elevation value
+      canvas.setTextSize(2);
+      String elev_str = "Elev: " + String((int)elevation);
+      canvas.drawString(elev_str, centerX, 110);
 
       // WiFi status bar
       canvas.setTextSize(1);
@@ -292,7 +293,7 @@ void loop() {
       canvas.setTextColor(WHITE); // Reset text color
 
       canvas.pushSprite(0, 0);
-      String json_data = "{\"azimuth\":" + String(a) + ", \"roll\":" + String((int)roll) + "}";
+      String json_data = "{\"azimuth\":" + String(a) + ", \"elev\":" + String((int)elevation) + "}";
       ws.textAll(json_data);
       previousMillis = currentMillis;
     }
