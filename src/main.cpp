@@ -7,6 +7,7 @@
 #include "esp32-hal-cpu.h"
 #include <Preferences.h>
 #include <LittleFS.h>
+#include <ESPmDNS.h>
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
@@ -117,6 +118,13 @@ void setup() {
   WiFiManager wm;
   wm.setAPCallback(configModeCallback);
   wm.autoConnect("Compass_Setup");
+
+  if (!MDNS.begin("compass")) {
+    M5.Log.println("Error setting up MDNS responder!");
+  } else {
+    M5.Log.println("mDNS responder started");
+    MDNS.addService("http", "tcp", 80);
+  }
   
   canvas.fillSprite(BLACK); // Clear config message
   canvas.pushSprite(0,0);
