@@ -274,8 +274,8 @@ void runCalibration() {
   while (millis() - startTime < 15000) {
     compass.read();
     int rawX = compass.getX();
-    int rawY = compass->getY();
-    int rawZ = compass->getZ();
+    int rawY = compass.getY();
+    int rawZ = compass.getZ();
 
     if (rawX < minX) minX = rawX;
     if (rawX > maxX) maxX = rawX;
