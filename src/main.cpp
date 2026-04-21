@@ -67,6 +67,13 @@ void compass_init_on_wire1() {
 }
 
 void readRawCompass_on_wire1(int* x, int* y, int* z) {
+  // Re-assert continuous measurement mode. Some QMC5883L clones may need this to get fresh data.
+  Wire1.beginTransmission(0x0D);
+  Wire1.write(0x09); // QMC5883L_REG_CONTROL_1
+  Wire1.write(0x1D); // ODR=200Hz, RNG=8G, OSR=512, Mode=Continuous
+  Wire1.endTransmission();
+  delay(10); // Give it time to take a measurement
+
   Wire1.beginTransmission(0x0D);
   Wire1.write(0x00); // Start reading from register 0
   Wire1.endTransmission();
