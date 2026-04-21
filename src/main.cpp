@@ -166,7 +166,8 @@ void loop() {
 
       float accX, accY, accZ;
       M5.Imu.getAccelData(&accX, &accY, &accZ);
-      float pitch = atan2(-accX, sqrt(accY * accY + accZ * accZ)) * 180.0 / PI;
+      float pitch = atan2(-accY, accZ) * 180.0 / PI;
+      float roll = atan2(accX, accZ) * 180.0 / PI;
 
       // Return Azimuth reading
 
@@ -211,15 +212,20 @@ void loop() {
       // Centered degrees
       canvas.setTextSize(5);
       canvas.setTextDatum(MC_DATUM); // Middle-Center datum
-      canvas.drawString(String(a), centerX, 80);
+      canvas.drawString(String(a), centerX, 75);
 
-      // Pitch value
+      // Pitch & Roll values
       canvas.setTextSize(2);
+
       String pitch_str = "Pitch: " + String((int)pitch);
-      canvas.drawString(pitch_str, centerX, 110);
+      canvas.drawString(pitch_str, centerX, 100);
       int pitchTextWidth = canvas.textWidth(pitch_str);
-      // Draw degree circle
-      canvas.drawCircle(centerX + pitchTextWidth/2 + 2, 110 - 7, 2, WHITE);
+      canvas.drawCircle(centerX + pitchTextWidth/2 + 2, 100 - 7, 2, WHITE);
+
+      String roll_str = "Roll: " + String((int)roll);
+      canvas.drawString(roll_str, centerX, 115);
+      int rollTextWidth = canvas.textWidth(roll_str);
+      canvas.drawCircle(centerX + rollTextWidth/2 + 2, 115 - 7, 2, WHITE);
 
       // WiFi status bar
       canvas.setTextSize(1);
@@ -234,7 +240,7 @@ void loop() {
       canvas.setTextColor(WHITE); // Reset text color
 
       canvas.pushSprite(0, 0);
-      String json_data = "{\"azimuth\":" + String(a) + ", \"pitch\":" + String((int)pitch) + "}";
+      String json_data = "{\"azimuth\":" + String(a) + ", \"pitch\":" + String((int)pitch) + ", \"roll\":" + String((int)roll) + "}";
       ws.textAll(json_data);
     }
 

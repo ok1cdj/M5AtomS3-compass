@@ -27,20 +27,20 @@
         #azimuth-container {
         }
         #azimuthValue {
-            font-size: 30vmin;
+            font-size: 25vmin;
             font-weight: bold;
             letter-spacing: 2px;
         }
         #degreeSymbol {
-            font-size: 15vmin;
+            font-size: 12vmin;
             vertical-align: super;
         }
-        #pitch-container {
-            font-size: 10vmin;
-            margin-top: 2vh;
+        .imu-container {
+            font-size: 8vmin;
+            margin-top: 1vh;
         }
-        #pitchDegreeSymbol {
-            font-size: 5vmin;
+        .imu-degree-symbol {
+            font-size: 4vmin;
             vertical-align: super;
         }
     </style>
@@ -51,8 +51,11 @@
             <span id="azimuthValue">...</span>
             <span id="degreeSymbol">&deg;</span>
         </div>
-        <div id="pitch-container">
-            Pitch: <span id="pitchValue">...</span><span id="pitchDegreeSymbol">&deg;</span>
+        <div id="pitch-container" class="imu-container">
+            Pitch: <span id="pitchValue">...</span><span class="imu-degree-symbol">&deg;</span>
+        </div>
+        <div id="roll-container" class="imu-container">
+            Roll: <span id="rollValue">...</span><span class="imu-degree-symbol">&deg;</span>
         </div>
     </div>
 
@@ -82,6 +85,7 @@
                 const data = JSON.parse(event.data);
                 document.getElementById('azimuthValue').innerHTML = data.azimuth;
                 document.getElementById('pitchValue').innerHTML = data.pitch;
+                document.getElementById('rollValue').innerHTML = data.roll;
             } catch (e) {
                 console.error('Error parsing JSON:', e);
             }

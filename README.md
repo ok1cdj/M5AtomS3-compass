@@ -4,7 +4,7 @@ A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor.
 
 ## Features
 
-- Real-time, centered display of the compass heading.
+- Real-time, centered display of the compass heading, pitch, and roll.
 - On-device calibration for both magnetometer (hard-iron) and gyroscope (drift).
 - Calibration data is saved to non-volatile memory and is loaded on startup.
 - Status bar that shows whether the device is calibrated.
@@ -57,6 +57,7 @@ Once powered on, the device will start displaying the current compass heading. T
 - A top status bar showing `CALIBRATED` (green) with the current magnetic declination, or `UNCALIBRATED` (red).
 - A static red triangular arrow below the status bar, which serves as a fixed pointer.
 - The numerical heading value in degrees, centered on the middle of the screen.
+- Below the heading, the current `Pitch` and `Roll` values are displayed.
 - A bottom status bar showing the WiFi connection status and IP address (cyan) or a disconnected message (orange).
 
 ### Calibration
