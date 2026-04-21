@@ -1,14 +1,16 @@
 # M5AtomS3 Digital Compass
 
-A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor. It displays the magnetic heading (azimuth) in degrees on the built-in LCD.
+A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor. It displays the magnetic heading (azimuth) and elevation on the built-in LCD. The compass also features a web interface to view the data and configure settings.
 
 ## Features
 
-- Real-time, centered display of the compass heading, pitch, and roll.
+- Real-time display of compass heading (azimuth) and elevation.
+- Web interface accessible at `http://compass.local` for remote viewing and settings.
 - On-device calibration for both magnetometer (hard-iron) and gyroscope (drift).
-- Calibration data is saved to non-volatile memory and is loaded on startup.
-- Status bar that shows whether the device is calibrated.
-- Power optimization by disabling WiFi/Bluetooth and reducing CPU frequency.
+- Calibration data is saved to non-volatile memory and loaded on startup.
+- Magnetic declination can be configured on the device or via the web interface.
+- Status bars for calibration and WiFi status.
+- Power optimization by reducing CPU frequency and disabling Bluetooth.
 
 ## Hardware
 
@@ -33,7 +35,7 @@ The QMC5883L module should be connected via I2C. The code is configured for the 
 | VCC      | 3.3V     |
 | GND      | GND      |
 
-*Note: The code initializes the I2C bus with `Wire.begin(38, 39);`.*
+*Note: The code initializes the I2C bus with `Wire1.begin(38, 39);`.*
 
 ## Software & Dependencies
 
@@ -54,12 +56,18 @@ The main dependencies are configured in `platformio.ini`:
 
 ### Operation
 
-Once powered on, the device will start displaying the current compass heading. The display consists of:
+Once powered on, the device connects to WiFi and starts displaying the current compass heading. The display consists of:
 - A top status bar showing `CALIBRATED` (green) with the current magnetic declination, or `UNCALIBRATED` (red).
 - A static red triangular arrow below the status bar, which serves as a fixed pointer.
 - The numerical heading value in degrees, centered on the middle of the screen.
-- Below the heading, the current `Pitch` and `Roll` values are displayed.
+- Below the heading, the current elevation (`Elev`) is displayed.
 - A bottom status bar showing the WiFi connection status and IP address (cyan) or a disconnected message (orange).
+
+### Web Interface
+
+The device is accessible on your local network via the address `http://compass.local`. The web interface provides:
+- A large, real-time display of the azimuth and elevation.
+- A settings page (accessible via the gear icon `⚙️`) to configure the magnetic declination.
 
 ### Calibration
 
@@ -79,10 +87,15 @@ You should re-calibrate whenever the device's magnetic environment changes (e.g.
 
 ### Magnetic Declination Setting
 
-Magnetic declination is the angle between magnetic north and true north. For accurate headings, you must set this for your location.
+Magnetic declination is the angle between magnetic north and true north. For accurate headings, you must set this for your location. There are two ways to set it:
 
+#### On-Device Method
 1.  **Press and hold the built-in button for 5 seconds or more, then release** to enter declination setting mode.
 2.  The screen will show the current declination value.
 3.  **Short-press the button** to increment the value. It cycles from -10 to +10 degrees.
-4.  Once you have set the desired value, **wait for 2 seconds without pressing the button**.
-5.  The value will be saved automatically, and the compass will return to normal operation.
+4.  Once you have set the desired value, **wait for 2 seconds without pressing the button**. The value will be saved, and the device will return to normal operation.
+
+#### Web Interface Method
+1.  Open `http://compass.local` in your browser.
+2.  Click the gear icon (`⚙️`) to navigate to the settings page.
+3.  Enter your local declination value and click "Set". The value is saved immediately.
