@@ -70,6 +70,7 @@ void setup() {
   btStop();
   setCpuFrequencyMhz(80); //Set CPU clock to 80MHz fo example
   M5.begin();
+  M5.Imu.loadOffsetFromNVS();
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
   
   WiFiManager wm;
@@ -159,6 +160,7 @@ void loop() {
     unsigned long currentMillis = millis();
     if (currentMillis - previousMillis > interval)
     {
+      M5.Imu.update();
       int rawX, rawY, rawZ;
       readRawCompass(&rawX, &rawY, &rawZ);
 
@@ -309,22 +311,19 @@ void runCalibration() {
   canvas.drawString("Calibrating", canvas.width() / 2, 45);
   canvas.drawString("Gyro...", canvas.width() / 2, 75);
   canvas.pushSprite(0, 0);
-  
-  // Manual Gyro Calibration
-  long gx_sum = 0, gy_sum = 0, gz_sum = 0;
-  const int num_samples = 500;
-  for (int i = 0; i < num_samples; i++) {
-    gx_sum += M5.Imu.getGyroAdc(m5::ax_t::ax_x);
-    gy_sum += M5.Imu.getGyroAdc(m5::ax_t::ax_y);
-    gz_sum += M5.Imu.getGyroAdc(m5::ax_t::ax_z);
-    delay(5);
+
+  // Start gyro calibration using M5Unified's built-in function
+  M5.Imu.setCalibration(0, 64, 0); // Calibrate gyro only, strength 64
+
+  unsigned long calibStartTime = millis();
+  while (millis() - calibStartTime < 5000) { // Calibrate for 5 seconds
+    M5.Imu.update(); // The library performs calibration during update
+    delay(1);
   }
-  
-  int32_t gx_bias = gx_sum / num_samples;
-  int32_t gy_bias = gy_sum / num_samples;
-  int32_t gz_bias = gz_sum / num_samples;
-  
-  M5.Imu.setGyroBias(gx_bias, gy_bias, gz_bias);
+
+  // Stop calibration and save the results to NVS (Non-Volatile Storage)
+  M5.Imu.setCalibration(0, 0, 0);
+  M5.Imu.saveOffsetToNVS();
 
   canvas.fillSprite(GREEN);
   canvas.setTextSize(2);
