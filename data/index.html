@@ -18,23 +18,42 @@
             text-align: center;
             overflow: hidden;
         }
+        #container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
         #azimuth-container {
         }
         #azimuthValue {
-            font-size: 40vmin;
+            font-size: 30vmin;
             font-weight: bold;
             letter-spacing: 2px;
         }
         #degreeSymbol {
-            font-size: 20vmin;
+            font-size: 15vmin;
+            vertical-align: super;
+        }
+        #pitch-container {
+            font-size: 10vmin;
+            margin-top: 2vh;
+        }
+        #pitchDegreeSymbol {
+            font-size: 5vmin;
             vertical-align: super;
         }
     </style>
 </head>
 <body>
-    <div id="azimuth-container">
-        <span id="azimuthValue">...</span>
-        <span id="degreeSymbol">&deg;</span>
+    <div id="container">
+        <div id="azimuth-container">
+            <span id="azimuthValue">...</span>
+            <span id="degreeSymbol">&deg;</span>
+        </div>
+        <div id="pitch-container">
+            Pitch: <span id="pitchValue">...</span><span id="pitchDegreeSymbol">&deg;</span>
+        </div>
     </div>
 
     <script>
@@ -59,7 +78,13 @@
         }
 
         function onMessage(event) {
-            document.getElementById('azimuthValue').innerHTML = event.data;
+            try {
+                const data = JSON.parse(event.data);
+                document.getElementById('azimuthValue').innerHTML = data.azimuth;
+                document.getElementById('pitchValue').innerHTML = data.pitch;
+            } catch (e) {
+                console.error('Error parsing JSON:', e);
+            }
         }
 
         window.addEventListener('load', initWebSocket);

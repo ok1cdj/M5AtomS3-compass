@@ -161,6 +161,11 @@ void loop() {
     {
       int rawX, rawY, rawZ;
       readRawCompass(&rawX, &rawY, &rawZ);
+
+      float accX, accY, accZ;
+      M5.Imu.getAccelData(&accX, &accY, &accZ);
+      float pitch = atan2(-accX, sqrt(accY * accY + accZ * accZ)) * 180.0 / PI;
+
       // Return Azimuth reading
 
       float heading = atan2(rawY - offsetY, rawX - offsetX);
@@ -204,7 +209,15 @@ void loop() {
       // Centered degrees
       canvas.setTextSize(5);
       canvas.setTextDatum(MC_DATUM); // Middle-Center datum
-      canvas.drawString(String(a), centerX, 85);
+      canvas.drawString(String(a), centerX, 80);
+
+      // Pitch value
+      canvas.setTextSize(2);
+      String pitch_str = "Pitch: " + String((int)pitch);
+      canvas.drawString(pitch_str, centerX, 110);
+      int pitchTextWidth = canvas.textWidth(pitch_str);
+      // Draw degree circle
+      canvas.drawCircle(centerX + pitchTextWidth/2 + 2, 110 - 7, 2, WHITE);
 
       // WiFi status bar
       canvas.setTextSize(1);
@@ -219,7 +232,8 @@ void loop() {
       canvas.setTextColor(WHITE); // Reset text color
 
       canvas.pushSprite(0, 0);
-      ws.textAll(String(a));
+      String json_data = "{\"azimuth\":" + String(a) + ", \"pitch\":" + String((int)pitch) + "}";
+      ws.textAll(json_data);
     }
 
     ws.cleanupClients();
