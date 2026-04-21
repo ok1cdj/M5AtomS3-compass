@@ -48,10 +48,19 @@ void configModeCallback(WiFiManager *myWiFiManager) {
 void runCalibration(); // Forward declaration
 
 void compass_init_on_wire1() {
+  // Soft reset the sensor
+  Wire1.beginTransmission(0x0D);
+  Wire1.write(0x0B); // QMC5883L_REG_CONTROL_2
+  Wire1.write(0x01); // Set the soft reset bit
+  Wire1.endTransmission();
+  delay(10);
+
+  // Configure the sensor for continuous measurement
   Wire1.beginTransmission(0x0D);
   Wire1.write(0x09); // QMC5883L_REG_CONTROL_1
-  Wire1.write(0x1D); // 200Hz, +/-8G, Continuous
+  Wire1.write(0x1D); // ODR=200Hz, RNG=8G, OSR=64, Mode=Continuous
   Wire1.endTransmission();
+  delay(10);
 }
 
 void readRawCompass_on_wire1(int* x, int* y, int* z) {

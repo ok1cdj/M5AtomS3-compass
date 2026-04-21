@@ -41,7 +41,8 @@ This project is built using the [PlatformIO IDE](https://platformio.org/).
 
 The main dependencies are configured in `platformio.ini`:
 - `m5stack/M5Unified`: A comprehensive library for M5Stack devices, including M5GFX for display control.
-- `ok1cdj/QMC5883LCompass`: For interfacing with the QMC5883L sensor.
+- `tzapu/WiFiManager`: For WiFi configuration management.
+- `ESPAsyncWebServer` & `AsyncTCP`: For the web interface and WebSocket communication.
 
 ## How to Use
 
