@@ -2,6 +2,7 @@
 #include <M5Unified.h>
 #define Wire Wire1
 #include <QMC5883LCompass.h>
+#undef Wire
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <AsyncTCP.h>
