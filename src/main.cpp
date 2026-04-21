@@ -48,18 +48,21 @@ void configModeCallback(WiFiManager *myWiFiManager) {
 void runCalibration(); // Forward declaration
 
 void compass_init_on_wire1() {
+  M5.Log.println("Initializing compass...");
   // Soft reset the sensor
   Wire1.beginTransmission(0x0D);
   Wire1.write(0x0B); // QMC5883L_REG_CONTROL_2
   Wire1.write(0x01); // Set the soft reset bit
-  Wire1.endTransmission();
+  byte error = Wire1.endTransmission();
+  M5.Log.printf("Compass soft reset, endTransmission status: %d\n", error);
   delay(10);
 
   // Configure the sensor for continuous measurement
   Wire1.beginTransmission(0x0D);
   Wire1.write(0x09); // QMC5883L_REG_CONTROL_1
   Wire1.write(0x1D); // ODR=200Hz, RNG=8G, OSR=64, Mode=Continuous
-  Wire1.endTransmission();
+  error = Wire1.endTransmission();
+  M5.Log.printf("Compass config, endTransmission status: %d\n", error);
   delay(10);
 }
 
@@ -68,12 +71,13 @@ void readRawCompass_on_wire1(int* x, int* y, int* z) {
   Wire1.write(0x00); // Start reading from register 0
   Wire1.endTransmission();
 
-  Wire1.requestFrom(0x0D, 6);
-  if (Wire1.available() >= 6) {
+  int bytes_received = Wire1.requestFrom(0x0D, 6);
+  if (bytes_received >= 6) {
     *x = (int16_t)(Wire1.read() | (Wire1.read() << 8));
     *y = (int16_t)(Wire1.read() | (Wire1.read() << 8));
     *z = (int16_t)(Wire1.read() | (Wire1.read() << 8));
   } else {
+    M5.Log.printf("Compass read failed. Bytes received: %d\n", bytes_received);
     *x = *y = *z = 0; // Return 0 if read failed
   }
 }
@@ -82,6 +86,8 @@ void setup() {
   btStop();
   setCpuFrequencyMhz(80); //Set CPU clock to 80MHz fo example
   M5.begin();
+  M5.Log.begin(115200);
+  M5.Log.println("Starting setup...");
   M5.Imu.loadOffsetFromNVS();
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
   
@@ -175,6 +181,7 @@ void loop() {
       
       int rawX, rawY, rawZ;
       readRawCompass_on_wire1(&rawX, &rawY, &rawZ);
+      M5.Log.printf("Compass Raw: X=%d, Y=%d, Z=%d\n", rawX, rawY, rawZ);
 
       float accX, accY, accZ;
       M5.Imu.getAccelData(&accX, &accY, &accZ);
