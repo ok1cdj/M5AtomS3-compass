@@ -191,12 +191,26 @@ void loop() {
 
       float accX, accY, accZ;
       M5.Imu.getAccelData(&accX, &accY, &accZ);
-      float pitch = atan2(-accY, accZ) * 180.0 / PI;
-      float roll = atan2(accX, accZ) * 180.0 / PI;
+
+      // Pitch and roll in radians for tilt compensation
+      float pitch_rad = atan2(-accX, sqrt(accY * accY + accZ * accZ));
+      float roll_rad = atan2(accY, accZ);
+
+      // Convert to degrees for display
+      float pitch = pitch_rad * 180.0 / M_PI;
+      float roll = roll_rad * 180.0 / M_PI;
+
+      // Apply calibration offsets
+      float cal_mag_x = rawX - offsetX;
+      float cal_mag_y = rawY - offsetY;
+      float cal_mag_z = rawZ - offsetZ;
+      
+      // Tilt compensation
+      float comp_x = cal_mag_x * cos(pitch_rad) + cal_mag_z * sin(pitch_rad);
+      float comp_y = cal_mag_x * sin(roll_rad) * sin(pitch_rad) + cal_mag_y * cos(roll_rad) - cal_mag_z * sin(roll_rad) * cos(pitch_rad);
 
       // Return Azimuth reading
-
-      float heading = atan2(rawY - offsetY, rawX - offsetX);
+      float heading = atan2(comp_y, comp_x);
       float declinationAngle = (magneticDeclination * M_PI / 180.0);
       heading += declinationAngle;
 
