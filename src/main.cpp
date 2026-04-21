@@ -1,8 +1,5 @@
 #include <Arduino.h>
 #include <M5Unified.h>
-#define Wire Wire1
-#include <QMC5883LCompass.h>
-#undef Wire
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <AsyncTCP.h>
@@ -15,7 +12,6 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
 static M5Canvas canvas(&M5.Lcd);
-QMC5883LCompass compass;
 Preferences preferences;
 
 String azimuth;
@@ -23,10 +19,6 @@ String elevation;
 
 unsigned long previousMillis = 0UL;
 unsigned long interval = 250UL;
-
-const int MAGNETOMETER_STEPS = 10;
-const bool MAGNETOMETER_ADVANCED_SMOOTHING = true;
-const int MS_BETWEEN_SAMPLES = 100;
 
 int offsetX = 0;
 int offsetY = 0;
@@ -54,6 +46,28 @@ void configModeCallback(WiFiManager *myWiFiManager) {
 }
 
 void runCalibration(); // Forward declaration
+
+void compass_init_on_wire1() {
+  Wire1.beginTransmission(0x0D);
+  Wire1.write(0x09); // QMC5883L_REG_CONTROL_1
+  Wire1.write(0x1D); // 200Hz, +/-8G, Continuous
+  Wire1.endTransmission();
+}
+
+void readRawCompass_on_wire1(int* x, int* y, int* z) {
+  Wire1.beginTransmission(0x0D);
+  Wire1.write(0x00); // Start reading from register 0
+  Wire1.endTransmission();
+
+  Wire1.requestFrom(0x0D, 6);
+  if (Wire1.available() >= 6) {
+    *x = (int16_t)(Wire1.read() | (Wire1.read() << 8));
+    *y = (int16_t)(Wire1.read() | (Wire1.read() << 8));
+    *z = (int16_t)(Wire1.read() | (Wire1.read() << 8));
+  } else {
+    *x = *y = *z = 0; // Return 0 if read failed
+  }
+}
 
 void setup() {
   btStop();
@@ -84,8 +98,7 @@ void setup() {
   preferences.end();
 
   Wire1.begin(38, 39);
-  compass.init();
-  compass.setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
+  compass_init_on_wire1();
   M5.Lcd.setRotation(0);
 
   ws.onEvent(onWsEvent);
@@ -151,10 +164,8 @@ void loop() {
     {
       M5.Imu.update();
       
-      compass.read();
-      int rawX = compass.getX();
-      int rawY = compass.getY();
-      int rawZ = compass.getZ();
+      int rawX, rawY, rawZ;
+      readRawCompass_on_wire1(&rawX, &rawY, &rawZ);
 
       float accX, accY, accZ;
       M5.Imu.getAccelData(&accX, &accY, &accZ);
@@ -273,10 +284,8 @@ void runCalibration() {
 
   unsigned long startTime = millis();
   while (millis() - startTime < 15000) {
-    compass.read();
-    int rawX = compass.getX();
-    int rawY = compass.getY();
-    int rawZ = compass.getZ();
+    int rawX, rawY, rawZ;
+    readRawCompass_on_wire1(&rawX, &rawY, &rawZ);
 
     if (rawX < minX) minX = rawX;
     if (rawX > maxX) maxX = rawX;
