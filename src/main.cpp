@@ -13,7 +13,7 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
 static M5Canvas canvas(&M5.Lcd);
-QMC5883LCompass compass;
+QMC5883LCompass *compass;
 Preferences preferences;
 
 String azimuth;
@@ -81,9 +81,10 @@ void setup() {
   magneticDeclination = preferences.getInt("decl", 5);
   preferences.end();
 
-  Wire.begin(38, 39);
-  compass.init();
-  compass.setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
+  M5.Ex_I2C.begin(38, 39);
+  compass = new QMC5883LCompass(&M5.Ex_I2C);
+  compass->init();
+  compass->setSmoothing(MAGNETOMETER_STEPS, MAGNETOMETER_ADVANCED_SMOOTHING);
   M5.Lcd.setRotation(0);
 
   ws.onEvent(onWsEvent);
@@ -149,10 +150,10 @@ void loop() {
     {
       M5.Imu.update();
       
-      compass.read();
-      int rawX = compass.getX();
-      int rawY = compass.getY();
-      int rawZ = compass.getZ();
+      compass->read();
+      int rawX = compass->getX();
+      int rawY = compass->getY();
+      int rawZ = compass->getZ();
 
       float accX, accY, accZ;
       M5.Imu.getAccelData(&accX, &accY, &accZ);
@@ -271,10 +272,10 @@ void runCalibration() {
 
   unsigned long startTime = millis();
   while (millis() - startTime < 15000) {
-    compass.read();
-    int rawX = compass.getX();
-    int rawY = compass.getY();
-    int rawZ = compass.getZ();
+    compass->read();
+    int rawX = compass->getX();
+    int rawY = compass->getY();
+    int rawZ = compass->getZ();
 
     if (rawX < minX) minX = rawX;
     if (rawX > maxX) maxX = rawX;
