@@ -8,12 +8,15 @@
 #include <Preferences.h>
 #include <LittleFS.h>
 #include <ESPmDNS.h>
+#include <WiFiMulti.h>
+#include <ArduinoJson.h>
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
 static M5Canvas canvas(&M5.Lcd);
 Preferences preferences;
+WiFiMulti wifiMulti;
 
 String azimuth;
 String elevation;
@@ -50,6 +53,65 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       }
     }
   }
+}
+
+void saveWiFiCredentials(const char* ssid, const char* password) {
+  preferences.begin("wifi-config", false);
+  String current_creds = preferences.getString("creds", "[]");
+  preferences.end();
+
+  JsonDocument doc;
+  deserializeJson(doc, current_creds);
+  JsonArray array = doc.as<JsonArray>();
+
+  bool updated = false;
+  for (JsonObject obj : array) {
+    if (String(ssid) == obj["ssid"].as<String>()) {
+      obj["password"] = password;
+      updated = true;
+      break;
+    }
+  }
+
+  if (!updated) {
+    JsonObject new_cred = array.add<JsonObject>();
+    new_cred["ssid"] = ssid;
+    new_cred["password"] = password;
+  }
+
+  String new_creds;
+  serializeJson(doc, new_creds);
+
+  preferences.begin("wifi-config", false);
+  preferences.putString("creds", new_creds);
+  preferences.end();
+  M5.Log.printf("Saved new WiFi credentials for %s\n", ssid);
+}
+
+int loadWiFiCredentials() {
+  preferences.begin("wifi-config", true); // read-only
+  String current_creds = preferences.getString("creds", "[]");
+  preferences.end();
+
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, current_creds);
+  if (error) {
+    M5.Log.printf("Failed to parse wifi creds: %s\n", error.c_str());
+    return 0;
+  }
+
+  JsonArray array = doc.as<JsonArray>();
+  int count = 0;
+  for (JsonObject obj : array) {
+    const char* ssid = obj["ssid"];
+    const char* password = obj["password"];
+    if (ssid && password) {
+      wifiMulti.addAP(ssid, password);
+      M5.Log.printf("Loaded WiFi network: %s\n", ssid);
+      count++;
+    }
+  }
+  return count;
 }
 
 void configModeCallback(WiFiManager *myWiFiManager) {
@@ -115,9 +177,41 @@ void setup() {
   M5.Imu.loadOffsetFromNVS();
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
   
-  WiFiManager wm;
-  wm.setAPCallback(configModeCallback);
-  wm.autoConnect("Compass_Setup");
+  M5.Log.println("Loading WiFi credentials...");
+  int n = loadWiFiCredentials();
+  M5.Log.printf("Loaded %d WiFi networks.\n", n);
+
+  if (n > 0) {
+    canvas.fillSprite(BLACK);
+    canvas.setTextDatum(MC_DATUM);
+    canvas.setTextSize(2);
+    canvas.drawString("Connecting...", canvas.width() / 2, canvas.height() / 2);
+    canvas.pushSprite(0, 0);
+
+    M5.Log.println("Connecting to WiFi with WiFiMulti...");
+    uint8_t status = wifiMulti.run(10000); // 10 sekund timeout
+    if (status == WL_CONNECTED) {
+      M5.Log.printf("WiFi connected to %s\n", WiFi.SSID().c_str());
+    } else {
+      M5.Log.println("WiFiMulti connection failed. Starting WiFiManager.");
+    }
+  }
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFiManager wm;
+    wm.setAPCallback(configModeCallback);
+    if (wm.autoConnect("Compass_Setup")) {
+      M5.Log.println("WiFi connected via WiFiManager.");
+      saveWiFiCredentials(WiFi.SSID().c_str(), WiFi.psk().c_str());
+    } else {
+      M5.Log.println("WiFiManager failed to connect.");
+      canvas.fillSprite(BLACK);
+      canvas.setTextDatum(MC_DATUM);
+      canvas.drawString("WiFi FAILED", canvas.width() / 2, canvas.height() / 2);
+      canvas.pushSprite(0, 0);
+      while(true) { delay(1000); }
+    }
+  }
 
   if (!MDNS.begin("compass")) {
     M5.Log.println("Error setting up MDNS responder!");
