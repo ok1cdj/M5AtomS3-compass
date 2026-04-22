@@ -10,6 +10,7 @@ A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor.
 - Calibration data is saved to non-volatile memory and loaded on startup.
 - Magnetic declination can be configured on the device or via the web interface.
 - Status bars for calibration and WiFi status.
+- Support for multiple WiFi networks; the device remembers previously used networks and automatically connects.
 - Power optimization by reducing CPU frequency and disabling Bluetooth.
 
 ## Hardware
@@ -43,8 +44,9 @@ This project is built using the [PlatformIO IDE](https://platformio.org/).
 
 The main dependencies are configured in `platformio.ini`:
 - `m5stack/M5Unified`: A comprehensive library for M5Stack devices, including M5GFX for display control.
-- `tzapu/WiFiManager`: For WiFi configuration management.
+- `tzapu/WiFiManager`: Used for initial WiFi configuration via a captive portal.
 - `ESPAsyncWebServer` & `AsyncTCP`: For the web interface and WebSocket communication.
+- `bblanchon/ArduinoJson`: For storing multiple WiFi credentials.
 
 ## How to Use
 
@@ -56,12 +58,19 @@ The main dependencies are configured in `platformio.ini`:
 
 ### Operation
 
-Once powered on, the device connects to WiFi and starts displaying the current compass heading. The display consists of:
+Once powered on and connected to WiFi, the device starts displaying the current compass heading. The display consists of:
 - A top status bar showing `CALIBRATED` (green) with the current magnetic declination, or `UNCALIBRATED` (red).
 - A static red triangular arrow below the status bar, which serves as a fixed pointer.
 - The numerical heading value in degrees, centered on the middle of the screen.
 - Below the heading, the current elevation (`Elev`) is displayed.
 - A bottom status bar showing the WiFi connection status and IP address (cyan) or a disconnected message (orange).
+
+### WiFi Connection
+
+The device supports multiple WiFi networks.
+- On the first boot, or if no known network is in range, it will start a WiFi Access Point named `Compass_Setup`.
+- Connect to this network with your phone or computer. A captive portal should open automatically, where you can select your WiFi network and enter the password.
+- After connecting, the credentials are saved. The device will automatically try to connect to all saved networks on subsequent startups.
 
 ### Web Interface
 
