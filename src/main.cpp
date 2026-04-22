@@ -185,7 +185,7 @@ void setup() {
     canvas.fillSprite(BLACK);
     canvas.setTextDatum(MC_DATUM);
     canvas.setTextSize(2);
-    canvas.drawString("Connecting...", canvas.width() / 2, canvas.height() / 2);
+    canvas.drawString("Connecting", canvas.width() / 2, canvas.height() / 2);
     canvas.pushSprite(0, 0);
 
     M5.Log.println("Connecting to WiFi with WiFiMulti...");
