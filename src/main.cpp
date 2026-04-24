@@ -316,17 +316,21 @@ void loop() {
       M5.Imu.getAccelData(&accX, &accY, &accZ);
 
       // Elevation and roll in radians for tilt compensation
-      float roll_rad = atan2(-accX, sqrt(accY * accY + accZ * accZ));
-      float elevation_rad = atan2(accY, accZ);
+      float elevation_rad = atan2(-accX, sqrt(accY * accY + accZ * accZ));
+      float roll_rad = atan2(accY, accZ);
 
       // Convert to degrees for display/debug
       float elevation = elevation_rad * 180.0 / M_PI;
       float roll = roll_rad * 180.0 / M_PI;
 
       // Apply calibration offsets
-      float cal_mag_x = rawX - offsetX;
-      float cal_mag_y = rawY - offsetY;
-      float cal_mag_z = rawZ - offsetZ;
+      float raw_cal_x = rawX - offsetX;
+      float raw_cal_y = rawY - offsetY;
+      float raw_cal_z = rawZ - offsetZ;
+      // Rotate axes to align compass with IMU
+      float cal_mag_x = raw_cal_y;
+      float cal_mag_y = -raw_cal_x;
+      float cal_mag_z = raw_cal_z;
       
       // Tilt compensation
       float comp_x = cal_mag_x * cos(elevation_rad) + cal_mag_z * sin(elevation_rad);
@@ -341,9 +345,6 @@ void loop() {
       if(heading > 2 * M_PI) heading -= 2 * M_PI;
       
       a = round(heading * 180 / M_PI);
-      
-      a = a - 90;
-      if (a < 0) a = a + 360;
 
       M5.Log.printf("Calculated Azimuth: %d, Elevation: %.1f\n", a, elevation);
 
