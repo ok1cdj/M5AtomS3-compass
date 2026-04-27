@@ -328,8 +328,9 @@ void loop() {
       float raw_cal_y = rawY - offsetY;
       float raw_cal_z = rawZ - offsetZ;
       // Rotate axes to align compass with IMU
-      float cal_mag_x = raw_cal_y;
-      float cal_mag_y = -raw_cal_x;
+      // Compensate for 90-degree physical rotation:
+      float cal_mag_x = -raw_cal_y; 
+      float cal_mag_y = raw_cal_x;
       float cal_mag_z = raw_cal_z;
       
       // Tilt compensation
