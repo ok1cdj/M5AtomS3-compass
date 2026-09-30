@@ -5,9 +5,9 @@
 #include <ESPAsyncWebServer.h>
 #include "esp32-hal-cpu.h"
 #include <Preferences.h>
-#include <LittleFS.h>
 #include "sensors.h"
 #include "network.h"
+#include "web.h"
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
@@ -142,13 +142,6 @@ void setup() {
   M5.Log.println("Starting setup...");
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
   
-  if(!LittleFS.begin(true)){
-    canvas.setTextDatum(MC_DATUM);
-    canvas.drawString("LittleFS Error", canvas.width() / 2, canvas.height() / 2);
-    canvas.pushSprite(0,0);
-    return;
-  }
-
   preferences.begin("compass", false);
   magneticDeclination = preferences.getInt("decl", 5);
   preferences.end();
@@ -161,11 +154,11 @@ void setup() {
   server.addHandler(&ws);
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(LittleFS, "/index.html", "text/html");
+    sendEmbeddedPage(request, "index.html");
   });
 
   server.on("/settings", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(LittleFS, "/settings.html", "text/html");
+    sendEmbeddedPage(request, "settings.html");
   });
 
   networkBegin(server);

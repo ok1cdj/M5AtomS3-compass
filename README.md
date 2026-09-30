@@ -72,7 +72,8 @@ The main dependencies are configured in `platformio.ini`:
 1. Clone this repository.
 2. Open the project folder in PlatformIO (e.g., in VSCode with the PlatformIO extension).
 3. Build and upload the project to your M5AtomS3 (`pio run -t upload`).
-4. Upload the web pages from `data/` to the LittleFS filesystem (`pio run -t uploadfs`). Repeat this whenever a file in `data/` changes.
+
+The web pages in `data/` are embedded into the firmware at build time (gzip-compressed by `scripts/embed_web.py`), so there is no separate filesystem upload. Edit them as normal HTML files and rebuild.
 
 ### Operation
 

@@ -1,11 +1,11 @@
 #include "network.h"
+#include "web.h"
 #include <M5Unified.h>
 #include <WiFi.h>
 #include <WiFiMulti.h>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
-#include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <memory>
 
@@ -239,7 +239,7 @@ static const char *encryptionName(wifi_auth_mode_t mode) {
 
 static void registerRoutes(AsyncWebServer &server) {
   server.on("/wifi", HTTP_GET, [](AsyncWebServerRequest *request) {
-    request->send(LittleFS, "/wifi.html", "text/html");
+    sendEmbeddedPage(request, "wifi.html");
   });
 
   // Asynchronous scan: returns {"scanning":true} until results are available
