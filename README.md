@@ -1,12 +1,13 @@
 # M5AtomS3 Digital Compass
 
-A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor. It displays the magnetic heading (azimuth) and elevation on the built-in LCD. The compass also features a web interface to view the data and configure settings.
+A digital compass project for the M5AtomS3 using an external QMC5883L magnetometer or a GY-511 (LSM303DLHC) accelerometer + magnetometer module. It displays the magnetic heading (azimuth) and elevation on the built-in LCD. The compass also features a web interface to view the data and configure settings.
 
 ## Features
 
 - Real-time display of compass heading (azimuth) and elevation.
 - Web interface accessible at `http://compass.local` for remote viewing and settings.
-- On-device calibration for both magnetometer (hard-iron offsets and per-axis gain) and gyroscope (drift).
+- Automatic detection of the connected sensor (GY-511 / LSM303DLHC or QMC5883L).
+- On-device calibration of the magnetometer (hard-iron offsets and per-axis gain) and of the accelerometer level; each sensor keeps its own calibration.
 - Tilt-compensated heading, accurate to about ±10° for tilts up to 45°.
 - Calibration data is saved to non-volatile memory and loaded on startup.
 - Magnetic declination can be configured on the device or via the web interface.
@@ -18,7 +19,11 @@ A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor.
 ## Hardware
 
 - **M5AtomS3**
-- **QMC5883L Magnetometer Module**
+- One of the sensor modules (detected automatically at startup):
+  - **GY-511 (LSM303DLHC)**: accelerometer and magnetometer in one chip. The AtomS3 internal IMU is not used, so there is no misalignment between the two sensors. Preferred when both modules are connected.
+  - **QMC5883L magnetometer module**: used together with the AtomS3 internal accelerometer.
+
+If no sensor is found, the display shows `NO SENSOR`; WiFi and the web interface keep running.
 
 ### 3D Printed Mount
 
@@ -29,16 +34,27 @@ The repository includes a 3D model for a pipe mount designed for an M5Stack Atom
 
 ### Wiring
 
-The QMC5883L module should be connected via I2C. The code is configured for the following GPIO pins on the M5AtomS3:
+**GY-511 (LSM303DLHC)** is connected to the Grove port (I2C, `Wire`):
+
+| GY-511 | M5AtomS3 Grove |
+|--------|----------------|
+| SDA    | G2             |
+| SCL    | G1             |
+| VIN    | 5V (the module has its own regulator) |
+| GND    | GND            |
+
+*The ESP32-S3 pins are not 5V tolerant. The Grove port supplies 5V: check that the I2C pull-up resistors on the GY-511 go to its 3.3V regulator output, not to VIN. If unsure, power the module from 3.3V.*
+
+**QMC5883L** is connected to the header pins of the internal I2C bus (`Wire1`, shared with the internal IMU):
 
 | QMC5883L | M5AtomS3 |
 |----------|----------|
-| SCL      | GPIO 38  |
-| SDA      | GPIO 39  |
+| SDA      | GPIO 38  |
+| SCL      | GPIO 39  |
 | VCC      | 3.3V     |
 | GND      | GND      |
 
-*Note: The code initializes the I2C bus with `Wire1.begin(38, 39);`.*
+Mount the module so that its axes are aligned with the device: the heading is measured in the direction of the red arrow on the display.
 
 ## Software & Dependencies
 
@@ -84,16 +100,16 @@ The device is accessible on your local network via the address `http://compass.l
 
 ### Calibration
 
-To ensure accurate readings, it's crucial to calibrate both the magnetometer and the gyroscope. This process has two stages.
+To ensure accurate readings, calibrate the magnetometer and the accelerometer level. This process has two stages. The calibration is stored separately for each sensor module; a newly connected module shows `UNCALIBRATED` until it is calibrated.
 
 1.  **Press and hold the built-in button for 2 to 5 seconds, then release** to start the calibration mode.
 
 **Stage 1: Magnetometer Calibration**
 1.  The screen will turn **RED** and show a countdown. For the next **30 seconds**, slowly rotate the device in all directions, including on its sides and upside down (like drawing a figure-eight in the air). Every axis must point both along and against the magnetic field, otherwise the calibration is incomplete. Keep away from metal and electronics.
 
-**Stage 2: Gyroscope Calibration**
+**Stage 2: Level Calibration**
 1.  After the magnetometer calibration, the screen will turn **BLUE** and prompt you to place the device on a still, flat surface.
-2.  Place the device down and wait. The device will automatically calibrate the gyroscope to remove any drift.
+2.  Place the device on a level surface (check it with a spirit level) and wait. The accelerometer zero is measured, which corrects the elevation and the tilt compensation.
 3.  Once both stages are complete, the screen will turn **GREEN** to indicate success. The calculated offsets are saved, and the device will return to normal operation.
 
 You should re-calibrate whenever the device's magnetic environment changes (e.g., if you mount it in a new location).

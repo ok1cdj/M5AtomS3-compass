@@ -10,6 +10,7 @@
 #include <ESPmDNS.h>
 #include <WiFiMulti.h>
 #include <ArduinoJson.h>
+#include "sensors.h"
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
@@ -33,14 +34,29 @@ String elevation;
 unsigned long previousMillis = 0UL;
 unsigned long interval = 250UL;
 
+// Sensors are sampled faster than the display refresh and low-pass filtered
+const unsigned long SENSOR_INTERVAL_MS = 20;
+const float SENSOR_FILTER_ALPHA = 0.1;
+unsigned long lastSensorRead = 0;
+bool filterInitialized = false;
+float magF[3];     // filtered calibrated magnetic field
+float accF[3];     // filtered calibrated acceleration
+int lastRaw[3];    // last raw magnetometer sample, for diagnostics
+
+// Calibration of the detected sensor set, stored in NVS under sensorKeyPrefix()
+bool calibrated = false;
 int offsetX = 0;
 int offsetY = 0;
 int offsetZ = 0;
 const unsigned long CALIBRATION_TIME_MS = 30000;
+const unsigned long LEVEL_CALIBRATION_TIME_MS = 3000;
 // Per-axis gain correction (soft-iron / sensor gain mismatch)
 float scaleX = 1.0;
 float scaleY = 1.0;
 float scaleZ = 1.0;
+// Accelerometer zero when lying flat
+float accOffX = 0.0;
+float accOffY = 0.0;
 
 int magneticDeclination = 5;
 bool declinationMode = false;
@@ -216,46 +232,65 @@ void wifiTask(void *param) {
 
 void runCalibration(); // Forward declaration
 
-void compass_init_on_wire1() {
-  M5.Log.println("Initializing compass...");
-  // Soft reset the sensor
-  Wire1.beginTransmission(0x0D);
-  Wire1.write(0x0B); // QMC5883L_REG_CONTROL_2
-  Wire1.write(0x01); // Set the soft reset bit
-  byte error = Wire1.endTransmission();
-  M5.Log.printf("Compass soft reset, endTransmission status: %d\n", error);
-  delay(10);
-
-  // Configure the sensor for continuous measurement
-  Wire1.beginTransmission(0x0D);
-  Wire1.write(0x09); // QMC5883L_REG_CONTROL_1
-  Wire1.write(0x1D); // ODR=200Hz, RNG=8G, OSR=64, Mode=Continuous
-  error = Wire1.endTransmission();
-  M5.Log.printf("Compass config, endTransmission status: %d\n", error);
-  delay(10);
+String calKey(const char* name) {
+  return String(sensorKeyPrefix()) + name;
 }
 
-void readRawCompass_on_wire1(int* x, int* y, int* z) {
-  // Re-assert continuous measurement mode. Some QMC5883L clones may need this to get fresh data.
-  Wire1.beginTransmission(0x0D);
-  Wire1.write(0x09); // QMC5883L_REG_CONTROL_1
-  Wire1.write(0x1D); // ODR=200Hz, RNG=8G, OSR=512, Mode=Continuous
-  Wire1.endTransmission();
-  delay(10); // Give it time to take a measurement
+void loadCalibration() {
+  preferences.begin("compass", true);
+  calibrated = preferences.getBool(calKey("cal").c_str(), false);
+  offsetX = preferences.getInt(calKey("offX").c_str(), 0);
+  offsetY = preferences.getInt(calKey("offY").c_str(), 0);
+  offsetZ = preferences.getInt(calKey("offZ").c_str(), 0);
+  scaleX = preferences.getFloat(calKey("sclX").c_str(), 1.0);
+  scaleY = preferences.getFloat(calKey("sclY").c_str(), 1.0);
+  scaleZ = preferences.getFloat(calKey("sclZ").c_str(), 1.0);
+  accOffX = preferences.getFloat(calKey("accX").c_str(), 0.0);
+  accOffY = preferences.getFloat(calKey("accY").c_str(), 0.0);
+  preferences.end();
+  M5.Log.printf("Calibration (%s): %s, offsets %d, %d, %d, scales %.3f, %.3f, %.3f, acc %.3f, %.3f\n",
+                sensorName(), calibrated ? "yes" : "no", offsetX, offsetY, offsetZ,
+                scaleX, scaleY, scaleZ, accOffX, accOffY);
+}
 
-  Wire1.beginTransmission(0x0D);
-  Wire1.write(0x00); // Start reading from register 0
-  Wire1.endTransmission();
+void saveCalibration() {
+  preferences.begin("compass", false);
+  preferences.putBool(calKey("cal").c_str(), calibrated);
+  preferences.putInt(calKey("offX").c_str(), offsetX);
+  preferences.putInt(calKey("offY").c_str(), offsetY);
+  preferences.putInt(calKey("offZ").c_str(), offsetZ);
+  preferences.putFloat(calKey("sclX").c_str(), scaleX);
+  preferences.putFloat(calKey("sclY").c_str(), scaleY);
+  preferences.putFloat(calKey("sclZ").c_str(), scaleZ);
+  preferences.putFloat(calKey("accX").c_str(), accOffX);
+  preferences.putFloat(calKey("accY").c_str(), accOffY);
+  preferences.end();
+}
 
-  int bytes_received = Wire1.requestFrom(0x0D, 6);
-  if (bytes_received >= 6) {
-    *x = (int16_t)(Wire1.read() | (Wire1.read() << 8));
-    *y = (int16_t)(Wire1.read() | (Wire1.read() << 8));
-    *z = (int16_t)(Wire1.read() | (Wire1.read() << 8));
-  } else {
-    M5.Log.printf("Compass read failed. Bytes received: %d\n", bytes_received);
-    *x = *y = *z = 0; // Return 0 if read failed
+// Reads the sensors and updates the filtered, calibrated vectors
+void updateSensors() {
+  int rx, ry, rz;
+  float ax, ay, az;
+  if (!readAccRaw(ax, ay, az)) return;
+  if (!readMagRaw(rx, ry, rz)) return;
+
+  lastRaw[0] = rx;
+  lastRaw[1] = ry;
+  lastRaw[2] = rz;
+  float m[3] = {(rx - offsetX) * scaleX, (ry - offsetY) * scaleY, (rz - offsetZ) * scaleZ};
+  float acc[3] = {ax - accOffX, ay - accOffY, az};
+
+  // Filter the vectors, not the angle, so there is no jump at 359 -> 0
+  for (int i = 0; i < 3; i++) {
+    if (filterInitialized) {
+      magF[i] += SENSOR_FILTER_ALPHA * (m[i] - magF[i]);
+      accF[i] += SENSOR_FILTER_ALPHA * (acc[i] - accF[i]);
+    } else {
+      magF[i] = m[i];
+      accF[i] = acc[i];
+    }
   }
+  filterInitialized = true;
 }
 
 void setup() {
@@ -263,7 +298,6 @@ void setup() {
   setCpuFrequencyMhz(80); //Set CPU clock to 80MHz fo example
   M5.begin();
   M5.Log.println("Starting setup...");
-  M5.Imu.loadOffsetFromNVS();
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
   
   M5.Log.println("Loading WiFi credentials...");
@@ -278,18 +312,11 @@ void setup() {
   }
 
   preferences.begin("compass", false);
-  offsetX = preferences.getInt("offX", 0);
-  offsetY = preferences.getInt("offY", 0);
-  offsetZ = preferences.getInt("offZ", 0);
-  scaleX = preferences.getFloat("sclX", 1.0);
-  scaleY = preferences.getFloat("sclY", 1.0);
-  scaleZ = preferences.getFloat("sclZ", 1.0);
   magneticDeclination = preferences.getInt("decl", 5);
   preferences.end();
-  M5.Log.printf("Compass offsets: X=%d, Y=%d, Z=%d, scales: %.3f, %.3f, %.3f\n", offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ);
 
-  Wire1.begin(38, 39);
-  compass_init_on_wire1();
+  sensorsBegin();
+  loadCalibration();
   M5.Lcd.setRotation(0);
 
   ws.onEvent(onWsEvent);
@@ -356,26 +383,30 @@ void loop() {
         canvas.pushSprite(0, 0);
     }
   } else {
-    // Read compass values
     unsigned long currentMillis = millis();
-    if (currentMillis - previousMillis > interval)
-    {
-      M5.Imu.update();
-      
-      int rawX, rawY, rawZ;
-      readRawCompass_on_wire1(&rawX, &rawY, &rawZ);
-      M5.Log.printf("Compass Raw: X=%d, Y=%d, Z=%d\n", rawX, rawY, rawZ);
+    if (currentMillis - lastSensorRead >= SENSOR_INTERVAL_MS) {
+      lastSensorRead = currentMillis;
+      updateSensors();
+    }
 
-      float accX, accY, accZ;
-      M5.Imu.getAccelData(&accX, &accY, &accZ);
+    if (sensorSet() == SensorSet::None && currentMillis - previousMillis > interval) {
+      canvas.fillSprite(BLACK);
+      canvas.setTextDatum(MC_DATUM);
+      canvas.setTextSize(2);
+      canvas.setTextColor(RED);
+      canvas.drawString("NO SENSOR", canvas.width() / 2, canvas.height() / 2);
+      canvas.setTextColor(WHITE);
+      canvas.pushSprite(0, 0);
+      previousMillis = currentMillis;
+    }
+
+    if (filterInitialized && currentMillis - previousMillis > interval)
+    {
+      float accX = accF[0], accY = accF[1], accZ = accF[2];
+      float mx = magF[0], my = magF[1], mz = magF[2];
 
       // Elevation (tilt of Y axis, the arrow direction) for display
       float elevation = atan2(accY, sqrt(accX * accX + accZ * accZ)) * 180.0 / M_PI;
-
-      // Calibrated field; magnetometer axes match the IMU axes (verified on recorded data)
-      float mx = (rawX - offsetX) * scaleX;
-      float my = (rawY - offsetY) * scaleY;
-      float mz = (rawZ - offsetZ) * scaleZ;
 
       // Tilt compensation: build East and North in the device frame from gravity and field.
       // Accelerometer reads +1 g upwards at rest, so down = -acc.
@@ -394,8 +425,8 @@ void loop() {
       // constant in any orientation; if they change with tilt, calibration is wrong
       float mag_norm = sqrt(mx * mx + my * my + mz * mz);
       float dip = acos((mx * accX + my * accY + mz * accZ) / (mag_norm * acc_norm)) * 180.0 / M_PI;
-      M5.Log.printf("Diag: acc=%.2f,%.2f,%.2f mag=%.0f,%.0f,%.0f |m|=%.0f dip=%.1f\n",
-                    accX, accY, accZ, mx, my, mz, mag_norm, dip);
+      M5.Log.printf("Diag: raw=%d,%d,%d acc=%.2f,%.2f,%.2f mag=%.0f,%.0f,%.0f |m|=%.0f dip=%.1f\n",
+                    lastRaw[0], lastRaw[1], lastRaw[2], accX, accY, accZ, mx, my, mz, mag_norm, dip);
 
       heading += magneticDeclination * M_PI / 180.0;
 
@@ -407,7 +438,7 @@ void loop() {
       canvas.fillSprite(BLACK);
 
       // Status bar for calibration
-      if (offsetX != 0 || offsetY != 0 || offsetZ != 0) {
+      if (calibrated) {
           canvas.setTextSize(1);
           canvas.setTextColor(GREEN);
           canvas.setTextDatum(TC_DATUM); // Top-Center datum
@@ -458,8 +489,9 @@ void loop() {
       // Raw sensor data is included for remote diagnostics of axis mapping and calibration
       char json_data[320];
       snprintf(json_data, sizeof(json_data),
-               "{\"azimuth\":%d, \"elev\":%d, \"acc\":[%.3f,%.3f,%.3f], \"raw\":[%d,%d,%d], \"off\":[%d,%d,%d], \"scl\":[%.3f,%.3f,%.3f], \"dip\":%.1f}",
-               a, (int)elevation, accX, accY, accZ, rawX, rawY, rawZ, offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ, dip);
+               "{\"azimuth\":%d, \"elev\":%d, \"sensor\":\"%s\", \"acc\":[%.3f,%.3f,%.3f], \"raw\":[%d,%d,%d], \"off\":[%d,%d,%d], \"scl\":[%.3f,%.3f,%.3f], \"dip\":%.1f}",
+               a, (int)elevation, sensorName(), accX, accY, accZ, lastRaw[0], lastRaw[1], lastRaw[2],
+               offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ, dip);
       ws.textAll(json_data);
       previousMillis = currentMillis;
     }
@@ -476,7 +508,7 @@ void loop() {
         if (pressed_ms >= 5000) {
           declinationMode = true;
           lastDeclinationSetTime = millis();
-        } else if (pressed_ms >= 2000) {
+        } else if (pressed_ms >= 2000 && sensorSet() != SensorSet::None) {
           runCalibration();
         }
         pressStartTime = 0;
@@ -509,8 +541,7 @@ void runCalibration() {
     }
 
     int rawX, rawY, rawZ;
-    readRawCompass_on_wire1(&rawX, &rawY, &rawZ);
-    if (rawX == 0 && rawY == 0 && rawZ == 0) continue; // read failed
+    if (!readMagRawWait(rawX, rawY, rawZ)) continue;
 
     if (rawX < minX) minX = rawX;
     if (rawX > maxX) maxX = rawX;
@@ -539,41 +570,40 @@ void runCalibration() {
   M5.Log.printf("Calibration: offsets %d, %d, %d, ranges %.0f, %.0f, %.0f, scales %.3f, %.3f, %.3f\n",
                 offsetX, offsetY, offsetZ, rangeX, rangeY, rangeZ, scaleX, scaleY, scaleZ);
 
-  preferences.begin("compass", false);
-  preferences.putInt("offX", offsetX);
-  preferences.putInt("offY", offsetY);
-  preferences.putInt("offZ", offsetZ);
-  preferences.putFloat("sclX", scaleX);
-  preferences.putFloat("sclY", scaleY);
-  preferences.putFloat("sclZ", scaleZ);
-  preferences.end();
-  
-  // --- IMU Gyro Calibration Step ---
+  // --- Accelerometer level step (replaces gyro calibration: the gyro is not used) ---
   canvas.fillSprite(BLUE);
   canvas.setTextDatum(MC_DATUM);
   canvas.setTextSize(2);
   canvas.drawString("Place device", canvas.width() / 2, 45);
-  canvas.drawString("still & flat", canvas.width() / 2, 75);
+  canvas.drawString("flat & still", canvas.width() / 2, 75);
   canvas.pushSprite(0, 0);
   delay(3000);
 
   canvas.fillSprite(BLUE);
-  canvas.drawString("Calibrating", canvas.width() / 2, 45);
-  canvas.drawString("Gyro...", canvas.width() / 2, 75);
+  canvas.drawString("Leveling...", canvas.width() / 2, 60);
   canvas.pushSprite(0, 0);
 
-  // Start gyro calibration using M5Unified's built-in function
-  M5.Imu.setCalibration(0, 64, 0); // Calibrate gyro only, strength 64
-
-  unsigned long calibStartTime = millis();
-  while (millis() - calibStartTime < 5000) { // Calibrate for 5 seconds
-    M5.Imu.update(); // The library performs calibration during update
-    delay(1);
+  float sumX = 0, sumY = 0;
+  int samples = 0;
+  unsigned long levelStartTime = millis();
+  while (millis() - levelStartTime < LEVEL_CALIBRATION_TIME_MS) {
+    float ax, ay, az;
+    if (readAccRaw(ax, ay, az)) {
+      sumX += ax;
+      sumY += ay;
+      samples++;
+    }
+    delay(10);
   }
+  if (samples > 0) {
+    accOffX = sumX / samples;
+    accOffY = sumY / samples;
+  }
+  M5.Log.printf("Level calibration: acc offsets %.3f, %.3f from %d samples\n", accOffX, accOffY, samples);
 
-  // Stop calibration and save the results to NVS (Non-Volatile Storage)
-  M5.Imu.setCalibration(0, 0, 0);
-  M5.Imu.saveOffsetToNVS();
+  calibrated = true;
+  saveCalibration();
+  filterInitialized = false; // restart the filter with the new calibration
 
   canvas.fillSprite(GREEN);
   canvas.setTextSize(2);
