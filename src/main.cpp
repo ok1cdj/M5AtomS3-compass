@@ -315,9 +315,11 @@ void loop() {
       float accX, accY, accZ;
       M5.Imu.getAccelData(&accX, &accY, &accZ);
 
-      // Elevation and roll in radians for tilt compensation
+      // Elevation (tilt of Y axis) for display
       float elevation_rad = atan2(accY, sqrt(accX * accX + accZ * accZ));
-      float roll_rad = atan2(-accX, accZ);
+      // Pitch (rotation around Y) and roll (rotation around X) for tilt compensation
+      float pitch_rad = atan2(-accX, sqrt(accY * accY + accZ * accZ));
+      float roll_rad = atan2(accY, accZ);
 
       // Convert to degrees for display/debug
       float elevation = elevation_rad * 180.0 / M_PI;
@@ -328,14 +330,13 @@ void loop() {
       float raw_cal_y = rawY - offsetY;
       float raw_cal_z = rawZ - offsetZ;
       // Rotate axes to align compass with IMU
-      // Compensate for 90-degree physical rotation:
-      float cal_mag_x = -raw_cal_y; 
-      float cal_mag_y = raw_cal_x;
+      float cal_mag_x = raw_cal_y;
+      float cal_mag_y = -raw_cal_x;
       float cal_mag_z = raw_cal_z;
-      
+
       // Tilt compensation
-      float comp_x = cal_mag_x * cos(elevation_rad) + cal_mag_z * sin(elevation_rad);
-      float comp_y = cal_mag_x * sin(roll_rad) * sin(elevation_rad) + cal_mag_y * cos(roll_rad) - cal_mag_z * sin(roll_rad) * cos(elevation_rad);
+      float comp_x = cal_mag_x * cos(pitch_rad) + cal_mag_z * sin(pitch_rad);
+      float comp_y = cal_mag_x * sin(roll_rad) * sin(pitch_rad) + cal_mag_y * cos(roll_rad) - cal_mag_z * sin(roll_rad) * cos(pitch_rad);
 
       // Return Azimuth reading
       float heading = atan2(comp_y, comp_x);
@@ -345,9 +346,10 @@ void loop() {
       if(heading < 0) heading += 2 * M_PI;
       if(heading > 2 * M_PI) heading -= 2 * M_PI;
       
-      a = round(heading * 180 / M_PI);
+      a = (int)round(heading * 180 / M_PI) % 360;
+      if (a < 0) a += 360;
 
-      M5.Log.printf("Calculated Azimuth: %d, Elevation: %.1f\n", a, elevation);
+      M5.Log.printf("Calculated Azimuth: %d, Elevation: %.1f, Roll: %.1f\n", a, elevation, roll);
 
       canvas.fillSprite(BLACK);
 
