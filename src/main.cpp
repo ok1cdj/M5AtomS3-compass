@@ -22,7 +22,10 @@ const size_t MAX_WIFI_NETWORKS = 5;
 const uint32_t WIFI_PORTAL_TIMEOUT_S = 180;
 const uint32_t WIFI_RECONNECT_INTERVAL_MS = 30000;
 volatile int wifiNetworkCount = 0;
+volatile bool portalActive = false;
 bool mdnsStarted = false;
+bool serverStarted = false;
+WiFiManager wm;
 
 String azimuth;
 String elevation;
@@ -33,6 +36,11 @@ unsigned long interval = 250UL;
 int offsetX = 0;
 int offsetY = 0;
 int offsetZ = 0;
+const unsigned long CALIBRATION_TIME_MS = 30000;
+// Per-axis gain correction (soft-iron / sensor gain mismatch)
+float scaleX = 1.0;
+float scaleY = 1.0;
+float scaleZ = 1.0;
 
 int magneticDeclination = 5;
 bool declinationMode = false;
@@ -62,9 +70,11 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 }
 
 void saveWiFiCredentials(const char* ssid, const char* password) {
-  preferences.begin("wifi-config", false);
-  String current_creds = preferences.getString("creds", "[]");
-  preferences.end();
+  // Own Preferences instance: called from the WiFi task while loop() uses the global one
+  Preferences prefs;
+  prefs.begin("wifi-config", false);
+  String current_creds = prefs.getString("creds", "[]");
+  prefs.end();
 
   JsonDocument doc;
   deserializeJson(doc, current_creds);
@@ -94,9 +104,9 @@ void saveWiFiCredentials(const char* ssid, const char* password) {
   String new_creds;
   serializeJson(doc, new_creds);
 
-  preferences.begin("wifi-config", false);
-  preferences.putString("creds", new_creds);
-  preferences.end();
+  prefs.begin("wifi-config", false);
+  prefs.putString("creds", new_creds);
+  prefs.end();
   M5.Log.printf("Saved new WiFi credentials for %s\n", ssid);
 }
 
@@ -132,17 +142,6 @@ int loadWiFiCredentials() {
   return count;
 }
 
-void configModeCallback(WiFiManager *myWiFiManager) {
-  canvas.fillSprite(BLACK);
-  canvas.setTextDatum(MC_DATUM);
-  canvas.setTextSize(2);
-  canvas.drawString("WiFi Config", canvas.width() / 2, 40);
-  canvas.setTextSize(1);
-  canvas.drawString("Connect to AP:", canvas.width() / 2, 70);
-  canvas.drawString(myWiFiManager->getConfigPortalSSID().c_str(), canvas.width() / 2, 90);
-  canvas.pushSprite(0, 0);
-}
-
 void startMDNS() {
   if (mdnsStarted) return;
   if (!MDNS.begin("compass")) {
@@ -154,17 +153,64 @@ void startMDNS() {
   }
 }
 
-// Reconnects to any saved network in the background so the display loop never blocks
+void onWiFiConnected() {
+  startMDNS();
+  if (!serverStarted) {
+    // Started only after the config portal is closed: both use port 80
+    server.begin();
+    serverStarted = true;
+    M5.Log.println("Web server started");
+  }
+}
+
+// All WiFi work runs here so the compass starts immediately: tries saved networks,
+// once falls back to the config portal in the background, reconnects on drops
 void wifiTask(void *param) {
+  bool portalTried = false;
+  bool firstAttempt = true;
+  uint32_t lastAttempt = 0;
+
   for (;;) {
-    if (wifiNetworkCount > 0 && WiFi.status() != WL_CONNECTED) {
-      M5.Log.println("WiFi disconnected, trying saved networks...");
-      if (wifiMulti.run(8000) == WL_CONNECTED) {
+    if (portalActive) {
+      if (wm.process()) {
+        M5.Log.printf("WiFi connected via portal to %s\n", WiFi.SSID().c_str());
+        saveWiFiCredentials(WiFi.SSID().c_str(), WiFi.psk().c_str());
+        wifiMulti.addAP(WiFi.SSID().c_str(), WiFi.psk().c_str());
+        wifiNetworkCount = wifiNetworkCount + 1;
+      }
+      if (!wm.getConfigPortalActive()) {
+        portalActive = false;
+        if (WiFi.status() != WL_CONNECTED) {
+          M5.Log.println("Config portal closed, running offline.");
+          WiFi.mode(WIFI_STA);
+        }
+      }
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      onWiFiConnected();
+    } else if (firstAttempt || millis() - lastAttempt >= WIFI_RECONNECT_INTERVAL_MS) {
+      firstAttempt = false;
+      lastAttempt = millis();
+      if (wifiNetworkCount > 0) {
+        M5.Log.println("Trying saved WiFi networks...");
+        wifiMulti.run(8000);
+      }
+      if (WiFi.status() == WL_CONNECTED) {
         M5.Log.printf("WiFi connected to %s\n", WiFi.SSID().c_str());
-        startMDNS();
+        onWiFiConnected();
+      } else if (!portalTried && !serverStarted) {
+        portalTried = true;
+        M5.Log.println("Starting config portal Compass_Setup in background.");
+        wm.setConfigPortalBlocking(false);
+        wm.setConfigPortalTimeout(WIFI_PORTAL_TIMEOUT_S);
+        wm.startConfigPortal("Compass_Setup");
+        portalActive = true;
       }
     }
-    vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECT_INTERVAL_MS));
+    vTaskDelay(pdMS_TO_TICKS(500));
   }
 }
 
@@ -224,51 +270,6 @@ void setup() {
   wifiNetworkCount = loadWiFiCredentials();
   M5.Log.printf("Loaded %d WiFi networks.\n", wifiNetworkCount);
 
-  if (wifiNetworkCount > 0) {
-    canvas.fillSprite(BLACK);
-    canvas.setTextDatum(MC_DATUM);
-    canvas.setTextSize(1);
-    canvas.drawString("Connecting...", canvas.width() / 2, canvas.height() / 2);
-    canvas.pushSprite(0, 0);
-
-    M5.Log.println("Connecting to WiFi with WiFiMulti...");
-    uint8_t status = wifiMulti.run(10000); // 10 sekund timeout
-    if (status == WL_CONNECTED) {
-      M5.Log.printf("WiFi connected to %s\n", WiFi.SSID().c_str());
-    } else {
-      M5.Log.println("WiFiMulti connection failed. Starting WiFiManager.");
-    }
-  }
-  
-  if (WiFi.status() != WL_CONNECTED) {
-    WiFiManager wm;
-    wm.setAPCallback(configModeCallback);
-    wm.setConfigPortalTimeout(WIFI_PORTAL_TIMEOUT_S);
-    if (wm.autoConnect("Compass_Setup")) {
-      M5.Log.println("WiFi connected via WiFiManager.");
-      saveWiFiCredentials(WiFi.SSID().c_str(), WiFi.psk().c_str());
-      wifiMulti.addAP(WiFi.SSID().c_str(), WiFi.psk().c_str());
-      wifiNetworkCount = wifiNetworkCount + 1;
-    } else {
-      // Continue without WiFi so the compass still works offline
-      M5.Log.println("WiFiManager failed to connect. Running offline.");
-      WiFi.mode(WIFI_STA);
-      canvas.fillSprite(BLACK);
-      canvas.setTextDatum(MC_DATUM);
-      canvas.drawString("WiFi OFFLINE", canvas.width() / 2, canvas.height() / 2);
-      canvas.pushSprite(0, 0);
-      delay(2000);
-    }
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    startMDNS();
-  }
-  xTaskCreatePinnedToCore(wifiTask, "wifi", 4096, NULL, 1, NULL, 0);
-  
-  canvas.fillSprite(BLACK); // Clear config message
-  canvas.pushSprite(0,0);
-
   if(!LittleFS.begin(true)){
     canvas.setTextDatum(MC_DATUM);
     canvas.drawString("LittleFS Error", canvas.width() / 2, canvas.height() / 2);
@@ -280,8 +281,12 @@ void setup() {
   offsetX = preferences.getInt("offX", 0);
   offsetY = preferences.getInt("offY", 0);
   offsetZ = preferences.getInt("offZ", 0);
+  scaleX = preferences.getFloat("sclX", 1.0);
+  scaleY = preferences.getFloat("sclY", 1.0);
+  scaleZ = preferences.getFloat("sclZ", 1.0);
   magneticDeclination = preferences.getInt("decl", 5);
   preferences.end();
+  M5.Log.printf("Compass offsets: X=%d, Y=%d, Z=%d, scales: %.3f, %.3f, %.3f\n", offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ);
 
   Wire1.begin(38, 39);
   compass_init_on_wire1();
@@ -298,7 +303,7 @@ void setup() {
     request->send(LittleFS, "/settings.html", "text/html");
   });
 
-  server.begin();
+  xTaskCreatePinnedToCore(wifiTask, "wifi", 8192, NULL, 1, NULL, 0);
 }
 
 void loop() {
@@ -331,6 +336,9 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED) {
         canvas.setTextColor(CYAN);
         canvas.drawString(WiFi.localIP().toString(), canvas.width() / 2, canvas.height() - 2);
+    } else if (portalActive) {
+        canvas.setTextColor(YELLOW);
+        canvas.drawString("AP: Compass_Setup", canvas.width() / 2, canvas.height() - 2);
     } else {
         canvas.setTextColor(ORANGE);
         canvas.drawString("WiFi Disconnected", canvas.width() / 2, canvas.height() - 2);
@@ -361,41 +369,40 @@ void loop() {
       float accX, accY, accZ;
       M5.Imu.getAccelData(&accX, &accY, &accZ);
 
-      // Elevation (tilt of Y axis) for display
-      float elevation_rad = atan2(accY, sqrt(accX * accX + accZ * accZ));
-      // Pitch (rotation around Y) and roll (rotation around X) for tilt compensation
-      float pitch_rad = atan2(-accX, sqrt(accY * accY + accZ * accZ));
-      float roll_rad = atan2(accY, accZ);
+      // Elevation (tilt of Y axis, the arrow direction) for display
+      float elevation = atan2(accY, sqrt(accX * accX + accZ * accZ)) * 180.0 / M_PI;
 
-      // Convert to degrees for display/debug
-      float elevation = elevation_rad * 180.0 / M_PI;
-      float roll = roll_rad * 180.0 / M_PI;
+      // Calibrated field; magnetometer axes match the IMU axes (verified on recorded data)
+      float mx = (rawX - offsetX) * scaleX;
+      float my = (rawY - offsetY) * scaleY;
+      float mz = (rawZ - offsetZ) * scaleZ;
 
-      // Apply calibration offsets
-      float raw_cal_x = rawX - offsetX;
-      float raw_cal_y = rawY - offsetY;
-      float raw_cal_z = rawZ - offsetZ;
-      // Rotate axes to align compass with IMU
-      float cal_mag_x = raw_cal_y;
-      float cal_mag_y = -raw_cal_x;
-      float cal_mag_z = raw_cal_z;
+      // Tilt compensation: build East and North in the device frame from gravity and field.
+      // Accelerometer reads +1 g upwards at rest, so down = -acc.
+      float acc_norm = sqrt(accX * accX + accY * accY + accZ * accZ);
+      float dx = -accX / acc_norm, dy = -accY / acc_norm, dz = -accZ / acc_norm;
+      // East = down x field
+      float ex = dy * mz - dz * my;
+      float ey = dz * mx - dx * mz;
+      float ez = dx * my - dy * mx;
+      // North = East x down
+      float ny = ez * dx - ex * dz;
+      // Heading of the arrow (device +Y axis): atan2(forward . East, forward . North)
+      float heading = atan2(ey, ny);
 
-      // Tilt compensation
-      float comp_x = cal_mag_x * cos(pitch_rad) + cal_mag_z * sin(pitch_rad);
-      float comp_y = cal_mag_x * sin(roll_rad) * sin(pitch_rad) + cal_mag_y * cos(roll_rad) - cal_mag_z * sin(roll_rad) * cos(pitch_rad);
+      // Diagnostics: field magnitude and angle between field and gravity must stay
+      // constant in any orientation; if they change with tilt, calibration is wrong
+      float mag_norm = sqrt(mx * mx + my * my + mz * mz);
+      float dip = acos((mx * accX + my * accY + mz * accZ) / (mag_norm * acc_norm)) * 180.0 / M_PI;
+      M5.Log.printf("Diag: acc=%.2f,%.2f,%.2f mag=%.0f,%.0f,%.0f |m|=%.0f dip=%.1f\n",
+                    accX, accY, accZ, mx, my, mz, mag_norm, dip);
 
-      // Return Azimuth reading
-      float heading = atan2(comp_y, comp_x);
-      float declinationAngle = (magneticDeclination * M_PI / 180.0);
-      heading += declinationAngle;
+      heading += magneticDeclination * M_PI / 180.0;
 
-      if(heading < 0) heading += 2 * M_PI;
-      if(heading > 2 * M_PI) heading -= 2 * M_PI;
-      
       a = (int)round(heading * 180 / M_PI) % 360;
       if (a < 0) a += 360;
 
-      M5.Log.printf("Calculated Azimuth: %d, Elevation: %.1f, Roll: %.1f\n", a, elevation, roll);
+      M5.Log.printf("Calculated Azimuth: %d, Elevation: %.1f\n", a, elevation);
 
       canvas.fillSprite(BLACK);
 
@@ -438,6 +445,9 @@ void loop() {
       if (WiFi.status() == WL_CONNECTED) {
           canvas.setTextColor(CYAN);
           canvas.drawString(WiFi.localIP().toString(), canvas.width() / 2, canvas.height() - 2);
+      } else if (portalActive) {
+          canvas.setTextColor(YELLOW);
+          canvas.drawString("AP: Compass_Setup", canvas.width() / 2, canvas.height() - 2);
       } else {
           canvas.setTextColor(ORANGE);
           canvas.drawString("WiFi Disconnected", canvas.width() / 2, canvas.height() - 2);
@@ -445,7 +455,11 @@ void loop() {
       canvas.setTextColor(WHITE); // Reset text color
 
       canvas.pushSprite(0, 0);
-      String json_data = "{\"azimuth\":" + String(a) + ", \"elev\":" + String((int)elevation) + "}";
+      // Raw sensor data is included for remote diagnostics of axis mapping and calibration
+      char json_data[320];
+      snprintf(json_data, sizeof(json_data),
+               "{\"azimuth\":%d, \"elev\":%d, \"acc\":[%.3f,%.3f,%.3f], \"raw\":[%d,%d,%d], \"off\":[%d,%d,%d], \"scl\":[%.3f,%.3f,%.3f], \"dip\":%.1f}",
+               a, (int)elevation, accX, accY, accZ, rawX, rawY, rawZ, offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ, dip);
       ws.textAll(json_data);
       previousMillis = currentMillis;
     }
@@ -476,19 +490,27 @@ void runCalibration() {
   int minY = 32767, maxY = -32767;
   int minZ = 32767, maxZ = -32767;
 
-  canvas.fillSprite(RED);
-  canvas.setTextDatum(MC_DATUM);
-  canvas.setTextSize(3);
-  canvas.drawString("CAL", canvas.width() / 2, 40);
-  canvas.setTextSize(2);
-  canvas.drawString("Rotate", canvas.width() / 2, 75);
-  canvas.drawString("Device", canvas.width() / 2, 95);
-  canvas.pushSprite(0, 0);
-
+  // Every axis must point both along and against the field, so the device
+  // has to be turned in all directions (incl. upside down), not only flat
   unsigned long startTime = millis();
-  while (millis() - startTime < 15000) {
+  int lastSecondsLeft = -1;
+  while (millis() - startTime < CALIBRATION_TIME_MS) {
+    int secondsLeft = (CALIBRATION_TIME_MS - (millis() - startTime) + 999) / 1000;
+    if (secondsLeft != lastSecondsLeft) {
+      lastSecondsLeft = secondsLeft;
+      canvas.fillSprite(RED);
+      canvas.setTextDatum(MC_DATUM);
+      canvas.setTextSize(3);
+      canvas.drawString("CAL " + String(secondsLeft), canvas.width() / 2, 35);
+      canvas.setTextSize(2);
+      canvas.drawString("Rotate in", canvas.width() / 2, 75);
+      canvas.drawString("all dirs", canvas.width() / 2, 95);
+      canvas.pushSprite(0, 0);
+    }
+
     int rawX, rawY, rawZ;
     readRawCompass_on_wire1(&rawX, &rawY, &rawZ);
+    if (rawX == 0 && rawY == 0 && rawZ == 0) continue; // read failed
 
     if (rawX < minX) minX = rawX;
     if (rawX > maxX) maxX = rawX;
@@ -503,11 +525,27 @@ void runCalibration() {
   offsetX = (maxX + minX) / 2;
   offsetY = (maxY + minY) / 2;
   offsetZ = (maxZ + minZ) / 2;
-  
+
+  // Equalize axis gains: scale each axis range to the average range
+  float rangeX = maxX - minX, rangeY = maxY - minY, rangeZ = maxZ - minZ;
+  float avgRange = (rangeX + rangeY + rangeZ) / 3.0;
+  if (rangeX > 100 && rangeY > 100 && rangeZ > 100) {
+    scaleX = avgRange / rangeX;
+    scaleY = avgRange / rangeY;
+    scaleZ = avgRange / rangeZ;
+  } else {
+    scaleX = scaleY = scaleZ = 1.0; // not enough rotation for gain correction
+  }
+  M5.Log.printf("Calibration: offsets %d, %d, %d, ranges %.0f, %.0f, %.0f, scales %.3f, %.3f, %.3f\n",
+                offsetX, offsetY, offsetZ, rangeX, rangeY, rangeZ, scaleX, scaleY, scaleZ);
+
   preferences.begin("compass", false);
   preferences.putInt("offX", offsetX);
   preferences.putInt("offY", offsetY);
   preferences.putInt("offZ", offsetZ);
+  preferences.putFloat("sclX", scaleX);
+  preferences.putFloat("sclY", scaleY);
+  preferences.putFloat("sclZ", scaleZ);
   preferences.end();
   
   // --- IMU Gyro Calibration Step ---

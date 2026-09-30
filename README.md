@@ -6,7 +6,8 @@ A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor.
 
 - Real-time display of compass heading (azimuth) and elevation.
 - Web interface accessible at `http://compass.local` for remote viewing and settings.
-- On-device calibration for both magnetometer (hard-iron) and gyroscope (drift).
+- On-device calibration for both magnetometer (hard-iron offsets and per-axis gain) and gyroscope (drift).
+- Tilt-compensated heading, accurate to about ±10° for tilts up to 45°.
 - Calibration data is saved to non-volatile memory and loaded on startup.
 - Magnetic declination can be configured on the device or via the web interface.
 - Status bars for calibration and WiFi status.
@@ -88,7 +89,7 @@ To ensure accurate readings, it's crucial to calibrate both the magnetometer and
 1.  **Press and hold the built-in button for 2 to 5 seconds, then release** to start the calibration mode.
 
 **Stage 1: Magnetometer Calibration**
-1.  The screen will turn **RED**. For the next **15 seconds**, slowly rotate the device in all directions, making sure to cover all axes (like drawing a figure-eight in the air). This compensates for magnetic distortions.
+1.  The screen will turn **RED** and show a countdown. For the next **30 seconds**, slowly rotate the device in all directions, including on its sides and upside down (like drawing a figure-eight in the air). Every axis must point both along and against the magnetic field, otherwise the calibration is incomplete. Keep away from metal and electronics.
 
 **Stage 2: Gyroscope Calibration**
 1.  After the magnetometer calibration, the screen will turn **BLUE** and prompt you to place the device on a still, flat surface.
