@@ -62,7 +62,6 @@ This project is built using the [PlatformIO IDE](https://platformio.org/).
 
 The main dependencies are configured in `platformio.ini`:
 - `m5stack/M5Unified`: A comprehensive library for M5Stack devices, including M5GFX for display control.
-- `tzapu/WiFiManager`: Used for initial WiFi configuration via a captive portal.
 - `ESPAsyncWebServer` & `AsyncTCP`: For the web interface and WebSocket communication.
 - `bblanchon/ArduinoJson`: For storing multiple WiFi credentials.
 
@@ -72,7 +71,8 @@ The main dependencies are configured in `platformio.ini`:
 
 1. Clone this repository.
 2. Open the project folder in PlatformIO (e.g., in VSCode with the PlatformIO extension).
-3. Build and upload the project to your M5AtomS3.
+3. Build and upload the project to your M5AtomS3 (`pio run -t upload`).
+4. Upload the web pages from `data/` to the LittleFS filesystem (`pio run -t uploadfs`). Repeat this whenever a file in `data/` changes.
 
 ### Operation
 
@@ -85,12 +85,13 @@ Once powered on and connected to WiFi, the device starts displaying the current 
 
 ### WiFi Connection
 
-The device supports multiple WiFi networks.
-- On the first boot, or if no known network is in range, it will start a WiFi Access Point named `Compass_Setup`.
-- Connect to this network with your phone or computer. A captive portal should open automatically, where you can select your WiFi network and enter the password.
-- If no network is configured within 3 minutes, the portal closes and the compass runs offline (`WiFi OFFLINE`).
-- After connecting, the credentials are saved. Up to 5 networks are remembered; when a 6th is added, the oldest one is dropped. The device will automatically try to connect to all saved networks on subsequent startups.
+The device supports multiple WiFi networks. All WiFi handling runs in the background, so the compass works immediately after power-on, with or without WiFi.
+- At startup the device tries all saved networks.
+- If none of them is available (or none is saved), it starts a WiFi access point named `Compass_Setup`; the bottom status bar shows `AP: Compass_Setup`. Connect to it with your phone or computer: a captive portal opens the WiFi setup page (or open `http://192.168.4.1/wifi`).
+- On the setup page you can scan for networks, add a network, and see and delete the saved networks. Up to 5 networks are remembered; when a 6th is added, the oldest one is dropped.
+- After a successful connection the access point closes after 10 seconds. If nothing is configured within 5 minutes, it closes and the compass runs offline.
 - If the connection drops while running, the device tries all saved networks again every 30 seconds.
+- While connected, the setup page is available at `http://compass.local/wifi` (or via the settings page).
 
 ### Web Interface
 

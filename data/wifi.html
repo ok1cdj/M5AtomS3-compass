@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>M5AtomS3 Compass WiFi</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #1a1a1a;
+            color: #33FF33; /* Terminal green */
+        }
+        body {
+            max-width: 32em;
+            margin: 0 auto;
+            padding: 1em;
+            box-sizing: border-box;
+        }
+        h1 {
+            font-size: 1.6em;
+            text-align: center;
+        }
+        h2 {
+            font-size: 1.1em;
+            border-bottom: 1px solid #33FF33;
+            padding-bottom: 0.2em;
+            margin-top: 1.5em;
+        }
+        input, button {
+            font-family: inherit;
+            font-size: 1em;
+            background-color: #1a1a1a;
+            color: #33FF33;
+            border: 1px solid #33FF33;
+            padding: 0.4em;
+            box-sizing: border-box;
+        }
+        input {
+            width: 100%;
+            margin-bottom: 0.5em;
+        }
+        button {
+            background-color: #333;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #444;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.4em 0;
+            border-bottom: 1px dashed #225522;
+            gap: 0.5em;
+        }
+        li.pick {
+            cursor: pointer;
+        }
+        li.pick:hover {
+            background-color: #222;
+        }
+        .dim {
+            color: #22aa22;
+        }
+        .back-link {
+            color: #33FF33;
+            text-decoration: none;
+            font-size: 1.5em;
+        }
+    </style>
+</head>
+<body>
+    <a href="/settings" class="back-link">&#8617;</a>
+
+    <h1>WiFi</h1>
+
+    <div id="state" class="dim">Loading...</div>
+
+    <h2>Saved networks <span id="count" class="dim"></span></h2>
+    <ul id="saved"></ul>
+
+    <h2>Add network</h2>
+    <button id="scanBtn">Scan</button>
+    <ul id="scan"></ul>
+    <p>
+        <input id="ssid" placeholder="SSID" maxlength="32">
+        <input id="password" type="password" placeholder="Password" maxlength="64">
+        <button id="saveBtn">Save &amp; connect</button>
+    </p>
+    <div id="status" class="dim"></div>
+
+    <script>
+        function setStatus(text) {
+            document.getElementById('status').innerText = text;
+        }
+
+        function item(text, extraClass) {
+            const li = document.createElement('li');
+            if (extraClass) li.className = extraClass;
+            const span = document.createElement('span');
+            span.innerText = text;
+            li.appendChild(span);
+            return li;
+        }
+
+        async function loadNetworks() {
+            const res = await fetch('/api/networks');
+            const data = await res.json();
+
+            let state = data.connected ? 'Connected to ' + data.connected + ' (' + data.ip + ')' : 'Not connected';
+            if (data.ap) state += ' | setup AP active';
+            document.getElementById('state').innerText = state;
+            document.getElementById('count').innerText = '(' + data.saved.length + '/' + data.max + ', oldest is replaced)';
+
+            const list = document.getElementById('saved');
+            list.innerHTML = '';
+            if (data.saved.length === 0) {
+                list.appendChild(item('none', 'dim'));
+            }
+            data.saved.forEach(ssid => {
+                const li = item(ssid + (ssid === data.connected ? ' *' : ''));
+                const del = document.createElement('button');
+                del.innerText = 'Delete';
+                del.onclick = () => deleteNetwork(ssid);
+                li.appendChild(del);
+                list.appendChild(li);
+            });
+        }
+
+        async function deleteNetwork(ssid) {
+            if (!confirm('Delete ' + ssid + '?')) return;
+            await fetch('/api/networks?ssid=' + encodeURIComponent(ssid), { method: 'DELETE' });
+            loadNetworks();
+        }
+
+        async function scan() {
+            const list = document.getElementById('scan');
+            list.innerHTML = '';
+            list.appendChild(item('Scanning...', 'dim'));
+            for (let i = 0; i < 20; i++) {
+                const res = await fetch('/api/scan');
+                const data = await res.json();
+                if (!data.scanning) {
+                    showScan(data.networks);
+                    return;
+                }
+                await new Promise(r => setTimeout(r, 1000));
+            }
+            list.innerHTML = '';
+            list.appendChild(item('Scan failed', 'dim'));
+        }
+
+        function showScan(networks) {
+            const list = document.getElementById('scan');
+            list.innerHTML = '';
+            networks.sort((a, b) => b.rssi - a.rssi);
+            // Strongest entry per SSID only
+            const seen = new Set();
+            networks.filter(n => !seen.has(n.ssid) && seen.add(n.ssid)).forEach(n => {
+                const li = item(n.ssid, 'pick');
+                const info = document.createElement('span');
+                info.className = 'dim';
+                info.innerText = n.rssi + ' dBm' + (n.enc === 'open' ? ' open' : '');
+                li.appendChild(info);
+                li.onclick = () => {
+                    document.getElementById('ssid').value = n.ssid;
+                    document.getElementById('password').focus();
+                };
+                list.appendChild(li);
+            });
+            if (seen.size === 0) list.appendChild(item('No networks found', 'dim'));
+        }
+
+        async function save() {
+            const ssid = document.getElementById('ssid').value.trim();
+            const password = document.getElementById('password').value;
+            if (!ssid) {
+                setStatus('Enter SSID');
+                return;
+            }
+            const body = new URLSearchParams({ ssid: ssid, password: password });
+            const res = await fetch('/api/networks', { method: 'POST', body: body });
+            if (!res.ok) {
+                setStatus('Save failed: ' + await res.text());
+                return;
+            }
+            document.getElementById('password').value = '';
+            setStatus('Saved. Connecting... (the setup AP closes 10 s after a successful connection)');
+            loadNetworks();
+            // Poll the state so the new IP is shown before the AP closes
+            for (let i = 0; i < 6; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                try { await loadNetworks(); } catch (e) { return; }
+            }
+        }
+
+        window.addEventListener('load', () => {
+            document.getElementById('scanBtn').addEventListener('click', scan);
+            document.getElementById('saveBtn').addEventListener('click', save);
+            loadNetworks();
+        });
+    </script>
+</body>
+</html>

@@ -1,32 +1,19 @@
 #include <Arduino.h>
 #include <M5Unified.h>
 #include <WiFi.h>
-#include <WiFiManager.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include "esp32-hal-cpu.h"
 #include <Preferences.h>
 #include <LittleFS.h>
-#include <ESPmDNS.h>
-#include <WiFiMulti.h>
-#include <ArduinoJson.h>
 #include "sensors.h"
+#include "network.h"
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
 static M5Canvas canvas(&M5.Display);
 Preferences preferences;
-WiFiMulti wifiMulti;
-
-const size_t MAX_WIFI_NETWORKS = 5;
-const uint32_t WIFI_PORTAL_TIMEOUT_S = 180;
-const uint32_t WIFI_RECONNECT_INTERVAL_MS = 30000;
-volatile int wifiNetworkCount = 0;
-volatile bool portalActive = false;
-bool mdnsStarted = false;
-bool serverStarted = false;
-WiFiManager wm;
 
 String azimuth;
 String elevation;
@@ -82,151 +69,6 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
         }
       }
     }
-  }
-}
-
-void saveWiFiCredentials(const char* ssid, const char* password) {
-  // Own Preferences instance: called from the WiFi task while loop() uses the global one
-  Preferences prefs;
-  prefs.begin("wifi-config", false);
-  String current_creds = prefs.getString("creds", "[]");
-  prefs.end();
-
-  JsonDocument doc;
-  deserializeJson(doc, current_creds);
-  JsonArray array = doc.as<JsonArray>();
-
-  if (array.isNull()) {
-    array = doc.to<JsonArray>();
-  }
-
-  // Keep the list ordered from oldest to newest: move an existing SSID to the end
-  for (size_t i = 0; i < array.size(); i++) {
-    if (String(ssid) == array[i]["ssid"].as<String>()) {
-      array.remove(i);
-      break;
-    }
-  }
-
-  JsonObject new_cred = array.add<JsonObject>();
-  new_cred["ssid"] = ssid;
-  new_cred["password"] = password;
-
-  // Drop the oldest networks over the limit
-  while (array.size() > MAX_WIFI_NETWORKS) {
-    array.remove(0);
-  }
-
-  String new_creds;
-  serializeJson(doc, new_creds);
-
-  prefs.begin("wifi-config", false);
-  prefs.putString("creds", new_creds);
-  prefs.end();
-  M5.Log.printf("Saved new WiFi credentials for %s\n", ssid);
-}
-
-int loadWiFiCredentials() {
-  preferences.begin("wifi-config", true); // read-only
-  String current_creds = preferences.getString("creds", "[]");
-  preferences.end();
-
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, current_creds);
-  if (error) {
-    M5.Log.printf("Failed to parse wifi creds: %s\n", error.c_str());
-    return 0;
-  }
-
-  JsonArray array = doc.as<JsonArray>();
-  int count = 0;
-  // Load only the newest MAX_WIFI_NETWORKS entries
-  size_t skip = array.size() > MAX_WIFI_NETWORKS ? array.size() - MAX_WIFI_NETWORKS : 0;
-  for (JsonObject obj : array) {
-    if (skip > 0) {
-      skip--;
-      continue;
-    }
-    const char* ssid = obj["ssid"];
-    const char* password = obj["password"];
-    if (ssid && password) {
-      wifiMulti.addAP(ssid, password);
-      M5.Log.printf("Loaded WiFi network: %s\n", ssid);
-      count++;
-    }
-  }
-  return count;
-}
-
-void startMDNS() {
-  if (mdnsStarted) return;
-  if (!MDNS.begin("compass")) {
-    M5.Log.println("Error setting up MDNS responder!");
-  } else {
-    M5.Log.println("mDNS responder started");
-    MDNS.addService("http", "tcp", 80);
-    mdnsStarted = true;
-  }
-}
-
-void onWiFiConnected() {
-  startMDNS();
-  if (!serverStarted) {
-    // Started only after the config portal is closed: both use port 80
-    server.begin();
-    serverStarted = true;
-    M5.Log.println("Web server started");
-  }
-}
-
-// All WiFi work runs here so the compass starts immediately: tries saved networks,
-// once falls back to the config portal in the background, reconnects on drops
-void wifiTask(void *param) {
-  bool portalTried = false;
-  bool firstAttempt = true;
-  uint32_t lastAttempt = 0;
-
-  for (;;) {
-    if (portalActive) {
-      if (wm.process()) {
-        M5.Log.printf("WiFi connected via portal to %s\n", WiFi.SSID().c_str());
-        saveWiFiCredentials(WiFi.SSID().c_str(), WiFi.psk().c_str());
-        wifiMulti.addAP(WiFi.SSID().c_str(), WiFi.psk().c_str());
-        wifiNetworkCount = wifiNetworkCount + 1;
-      }
-      if (!wm.getConfigPortalActive()) {
-        portalActive = false;
-        if (WiFi.status() != WL_CONNECTED) {
-          M5.Log.println("Config portal closed, running offline.");
-          WiFi.mode(WIFI_STA);
-        }
-      }
-      vTaskDelay(pdMS_TO_TICKS(10));
-      continue;
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-      onWiFiConnected();
-    } else if (firstAttempt || millis() - lastAttempt >= WIFI_RECONNECT_INTERVAL_MS) {
-      firstAttempt = false;
-      lastAttempt = millis();
-      if (wifiNetworkCount > 0) {
-        M5.Log.println("Trying saved WiFi networks...");
-        wifiMulti.run(8000);
-      }
-      if (WiFi.status() == WL_CONNECTED) {
-        M5.Log.printf("WiFi connected to %s\n", WiFi.SSID().c_str());
-        onWiFiConnected();
-      } else if (!portalTried && !serverStarted) {
-        portalTried = true;
-        M5.Log.println("Starting config portal Compass_Setup in background.");
-        wm.setConfigPortalBlocking(false);
-        wm.setConfigPortalTimeout(WIFI_PORTAL_TIMEOUT_S);
-        wm.startConfigPortal("Compass_Setup");
-        portalActive = true;
-      }
-    }
-    vTaskDelay(pdMS_TO_TICKS(500));
   }
 }
 
@@ -300,10 +142,6 @@ void setup() {
   M5.Log.println("Starting setup...");
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
   
-  M5.Log.println("Loading WiFi credentials...");
-  wifiNetworkCount = loadWiFiCredentials();
-  M5.Log.printf("Loaded %d WiFi networks.\n", wifiNetworkCount);
-
   if(!LittleFS.begin(true)){
     canvas.setTextDatum(MC_DATUM);
     canvas.drawString("LittleFS Error", canvas.width() / 2, canvas.height() / 2);
@@ -330,7 +168,8 @@ void setup() {
     request->send(LittleFS, "/settings.html", "text/html");
   });
 
-  xTaskCreatePinnedToCore(wifiTask, "wifi", 8192, NULL, 1, NULL, 0);
+  networkBegin(server);
+  server.begin();
 }
 
 void loop() {
@@ -363,7 +202,7 @@ void loop() {
     if (WiFi.status() == WL_CONNECTED) {
         canvas.setTextColor(CYAN);
         canvas.drawString(WiFi.localIP().toString(), canvas.width() / 2, canvas.height() - 2);
-    } else if (portalActive) {
+    } else if (networkApActive()) {
         canvas.setTextColor(YELLOW);
         canvas.drawString("AP: Compass_Setup", canvas.width() / 2, canvas.height() - 2);
     } else {
@@ -476,7 +315,7 @@ void loop() {
       if (WiFi.status() == WL_CONNECTED) {
           canvas.setTextColor(CYAN);
           canvas.drawString(WiFi.localIP().toString(), canvas.width() / 2, canvas.height() - 2);
-      } else if (portalActive) {
+      } else if (networkApActive()) {
           canvas.setTextColor(YELLOW);
           canvas.drawString("AP: Compass_Setup", canvas.width() / 2, canvas.height() - 2);
       } else {
