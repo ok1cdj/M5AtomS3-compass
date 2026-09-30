@@ -10,7 +10,8 @@ A digital compass project for the M5AtomS3 using a QMC5883L magnetometer sensor.
 - Calibration data is saved to non-volatile memory and loaded on startup.
 - Magnetic declination can be configured on the device or via the web interface.
 - Status bars for calibration and WiFi status.
-- Support for multiple WiFi networks; the device remembers previously used networks and automatically connects.
+- Support for multiple WiFi networks; the device remembers up to 5 previously used networks and automatically connects (and reconnects if the connection drops).
+- Works offline: if no WiFi is available, the compass keeps running without the web interface.
 - Power optimization by reducing CPU frequency and disabling Bluetooth.
 
 ## Hardware
@@ -70,7 +71,9 @@ Once powered on and connected to WiFi, the device starts displaying the current 
 The device supports multiple WiFi networks.
 - On the first boot, or if no known network is in range, it will start a WiFi Access Point named `Compass_Setup`.
 - Connect to this network with your phone or computer. A captive portal should open automatically, where you can select your WiFi network and enter the password.
-- After connecting, the credentials are saved. The device will automatically try to connect to all saved networks on subsequent startups.
+- If no network is configured within 3 minutes, the portal closes and the compass runs offline (`WiFi OFFLINE`).
+- After connecting, the credentials are saved. Up to 5 networks are remembered; when a 6th is added, the oldest one is dropped. The device will automatically try to connect to all saved networks on subsequent startups.
+- If the connection drops while running, the device tries all saved networks again every 30 seconds.
 
 ### Web Interface
 

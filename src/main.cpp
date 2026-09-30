@@ -18,6 +18,12 @@ static M5Canvas canvas(&M5.Lcd);
 Preferences preferences;
 WiFiMulti wifiMulti;
 
+const size_t MAX_WIFI_NETWORKS = 5;
+const uint32_t WIFI_PORTAL_TIMEOUT_S = 180;
+const uint32_t WIFI_RECONNECT_INTERVAL_MS = 30000;
+volatile int wifiNetworkCount = 0;
+bool mdnsStarted = false;
+
 String azimuth;
 String elevation;
 
@@ -64,19 +70,25 @@ void saveWiFiCredentials(const char* ssid, const char* password) {
   deserializeJson(doc, current_creds);
   JsonArray array = doc.as<JsonArray>();
 
-  bool updated = false;
-  for (JsonObject obj : array) {
-    if (String(ssid) == obj["ssid"].as<String>()) {
-      obj["password"] = password;
-      updated = true;
+  if (array.isNull()) {
+    array = doc.to<JsonArray>();
+  }
+
+  // Keep the list ordered from oldest to newest: move an existing SSID to the end
+  for (size_t i = 0; i < array.size(); i++) {
+    if (String(ssid) == array[i]["ssid"].as<String>()) {
+      array.remove(i);
       break;
     }
   }
 
-  if (!updated) {
-    JsonObject new_cred = array.add<JsonObject>();
-    new_cred["ssid"] = ssid;
-    new_cred["password"] = password;
+  JsonObject new_cred = array.add<JsonObject>();
+  new_cred["ssid"] = ssid;
+  new_cred["password"] = password;
+
+  // Drop the oldest networks over the limit
+  while (array.size() > MAX_WIFI_NETWORKS) {
+    array.remove(0);
   }
 
   String new_creds;
@@ -102,7 +114,13 @@ int loadWiFiCredentials() {
 
   JsonArray array = doc.as<JsonArray>();
   int count = 0;
+  // Load only the newest MAX_WIFI_NETWORKS entries
+  size_t skip = array.size() > MAX_WIFI_NETWORKS ? array.size() - MAX_WIFI_NETWORKS : 0;
   for (JsonObject obj : array) {
+    if (skip > 0) {
+      skip--;
+      continue;
+    }
     const char* ssid = obj["ssid"];
     const char* password = obj["password"];
     if (ssid && password) {
@@ -123,6 +141,31 @@ void configModeCallback(WiFiManager *myWiFiManager) {
   canvas.drawString("Connect to AP:", canvas.width() / 2, 70);
   canvas.drawString(myWiFiManager->getConfigPortalSSID().c_str(), canvas.width() / 2, 90);
   canvas.pushSprite(0, 0);
+}
+
+void startMDNS() {
+  if (mdnsStarted) return;
+  if (!MDNS.begin("compass")) {
+    M5.Log.println("Error setting up MDNS responder!");
+  } else {
+    M5.Log.println("mDNS responder started");
+    MDNS.addService("http", "tcp", 80);
+    mdnsStarted = true;
+  }
+}
+
+// Reconnects to any saved network in the background so the display loop never blocks
+void wifiTask(void *param) {
+  for (;;) {
+    if (wifiNetworkCount > 0 && WiFi.status() != WL_CONNECTED) {
+      M5.Log.println("WiFi disconnected, trying saved networks...");
+      if (wifiMulti.run(8000) == WL_CONNECTED) {
+        M5.Log.printf("WiFi connected to %s\n", WiFi.SSID().c_str());
+        startMDNS();
+      }
+    }
+    vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECT_INTERVAL_MS));
+  }
 }
 
 void runCalibration(); // Forward declaration
@@ -178,10 +221,10 @@ void setup() {
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
   
   M5.Log.println("Loading WiFi credentials...");
-  int n = loadWiFiCredentials();
-  M5.Log.printf("Loaded %d WiFi networks.\n", n);
+  wifiNetworkCount = loadWiFiCredentials();
+  M5.Log.printf("Loaded %d WiFi networks.\n", wifiNetworkCount);
 
-  if (n > 0) {
+  if (wifiNetworkCount > 0) {
     canvas.fillSprite(BLACK);
     canvas.setTextDatum(MC_DATUM);
     canvas.setTextSize(1);
@@ -200,25 +243,28 @@ void setup() {
   if (WiFi.status() != WL_CONNECTED) {
     WiFiManager wm;
     wm.setAPCallback(configModeCallback);
+    wm.setConfigPortalTimeout(WIFI_PORTAL_TIMEOUT_S);
     if (wm.autoConnect("Compass_Setup")) {
       M5.Log.println("WiFi connected via WiFiManager.");
       saveWiFiCredentials(WiFi.SSID().c_str(), WiFi.psk().c_str());
+      wifiMulti.addAP(WiFi.SSID().c_str(), WiFi.psk().c_str());
+      wifiNetworkCount = wifiNetworkCount + 1;
     } else {
-      M5.Log.println("WiFiManager failed to connect.");
+      // Continue without WiFi so the compass still works offline
+      M5.Log.println("WiFiManager failed to connect. Running offline.");
+      WiFi.mode(WIFI_STA);
       canvas.fillSprite(BLACK);
       canvas.setTextDatum(MC_DATUM);
-      canvas.drawString("WiFi FAILED", canvas.width() / 2, canvas.height() / 2);
+      canvas.drawString("WiFi OFFLINE", canvas.width() / 2, canvas.height() / 2);
       canvas.pushSprite(0, 0);
-      while(true) { delay(1000); }
+      delay(2000);
     }
   }
 
-  if (!MDNS.begin("compass")) {
-    M5.Log.println("Error setting up MDNS responder!");
-  } else {
-    M5.Log.println("mDNS responder started");
-    MDNS.addService("http", "tcp", 80);
+  if (WiFi.status() == WL_CONNECTED) {
+    startMDNS();
   }
+  xTaskCreatePinnedToCore(wifiTask, "wifi", 4096, NULL, 1, NULL, 0);
   
   canvas.fillSprite(BLACK); // Clear config message
   canvas.pushSprite(0,0);
