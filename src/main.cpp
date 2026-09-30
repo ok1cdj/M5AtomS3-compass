@@ -14,7 +14,7 @@
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
-static M5Canvas canvas(&M5.Lcd);
+static M5Canvas canvas(&M5.Display);
 Preferences preferences;
 WiFiMulti wifiMulti;
 
