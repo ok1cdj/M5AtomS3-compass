@@ -1,12 +1,13 @@
 #pragma once
 #include <Arduino.h>
 
-// Supported sensor sets, detected at startup: GY-511 on the Grove port (SDA G2 / SCL G1),
-// QMC5883L on the internal bus header pins (SDA 38 / SCL 39)
+// Supported sensor sets, detected at startup: GY-511 (LSM303D or LSM303DLHC) on the Grove
+// port (G1/G2, either wire order), QMC5883L on the internal bus header pins (SDA 38 / SCL 39)
 enum class SensorSet {
   None,
   QMC5883L_InternalImu, // external QMC5883L magnetometer + AtomS3 internal accelerometer
-  LSM303DLHC            // external GY-511: accelerometer and magnetometer in one chip
+  LSM303DLHC,           // external GY-511: accelerometer and magnetometer in one chip
+  LSM303D               // external GY-511 variant: newer chip, one I2C address for both
 };
 
 bool sensorsBegin();
