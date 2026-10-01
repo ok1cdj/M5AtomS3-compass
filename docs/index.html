@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Install M5AtomS3 Compass firmware</title>
+<meta name="description" content="Flash the M5AtomS3 Compass firmware to an M5Stack AtomS3 directly from your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0c1016;
+    --panel:#131a23;
+    --hairline:#232c3a;
+    --brass:#c98a3c;
+    --brass-bright:#e2a457;
+    --cyan:#5fd0c9;
+    --text:#eef2f5;
+    --text-muted:#8793a1;
+    --danger:#d9614f;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--ink);}
+  body{
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    color:var(--text);
+    padding:40px 20px 64px;
+    max-width:880px;
+    margin-inline:auto;
+    line-height:1.5;
+  }
+  a{color:var(--cyan);}
+  a:focus-visible, button:focus-visible{outline:2px solid var(--cyan);outline-offset:3px;}
+  h1,h2{font-family:'IBM Plex Mono',ui-monospace,monospace;font-weight:600;letter-spacing:-0.01em;margin:0;}
+
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;text-transform:uppercase;
+    letter-spacing:.14em;font-size:12px;color:var(--text-muted);margin:0 0 12px;
+  }
+  .hero h1{font-size:clamp(28px,5vw,40px);margin:0 0 14px;}
+  .lede{color:var(--text-muted);font-size:16px;max-width:58ch;margin:0 0 24px;}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+  .badge{
+    font-family:'IBM Plex Mono',monospace;font-size:12px;padding:5px 10px;
+    border:1px solid var(--hairline);border-radius:999px;color:var(--text-muted);
+  }
+
+  .rose-wrap{display:flex;justify-content:center;margin:30px 0 6px;}
+  .rose-wrap svg{width:min(180px,50%);height:auto;filter:drop-shadow(0 0 6px rgba(201,138,60,.35));}
+  .rose-caption{
+    text-align:center;font-family:'IBM Plex Mono',monospace;font-size:11px;
+    color:var(--text-muted);letter-spacing:.12em;margin:8px 0 36px;
+  }
+  .needle{transform-origin:60px 60px;animation:seek 8s ease-in-out infinite;}
+  @keyframes seek{
+    0%{transform:rotate(-40deg);} 18%{transform:rotate(25deg);} 30%{transform:rotate(-12deg);}
+    40%{transform:rotate(6deg);} 50%{transform:rotate(0deg);} 100%{transform:rotate(0deg);}
+  }
+  @media (prefers-reduced-motion: reduce){ .needle{animation:none;} }
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
+  @media (max-width:720px){ .grid{grid-template-columns:1fr;} }
+
+  .panel{
+    background:var(--panel);border:1px solid var(--hairline);
+    border-radius:var(--radius);padding:24px 26px;
+  }
+  .panel h2{
+    font-size:13px;margin:0 0 16px;color:var(--text-muted);
+    text-transform:uppercase;letter-spacing:.1em;
+  }
+
+  .checklist ul{margin:0;padding-left:18px;color:var(--text-muted);font-size:14px;}
+  .checklist li{margin-bottom:12px;}
+  .checklist strong{color:var(--text);}
+
+  .install{display:flex;flex-direction:column;}
+  .install-btn{
+    font-family:'IBM Plex Mono',monospace;
+    background:var(--brass);color:var(--ink);border:none;border-radius:6px;
+    padding:14px 20px;font-size:15px;font-weight:600;cursor:pointer;
+    transition:background .15s ease;width:100%;
+  }
+  .install-btn:hover{background:var(--brass-bright);}
+  .notice{
+    display:block;font-size:13px;line-height:1.6;padding:12px 14px;border-radius:8px;
+    background:rgba(217,97,79,.12);border:1px solid rgba(217,97,79,.4);color:#f2b3a8;
+  }
+  .hint{font-size:13px;color:var(--text-muted);margin-top:14px;}
+  .hint strong{color:var(--text);}
+
+  .steps{margin-bottom:18px;}
+  .steps ol{color:var(--text-muted);font-size:14px;line-height:1.9;padding-left:20px;margin:0;}
+  .steps li::marker{color:var(--brass);font-family:'IBM Plex Mono',monospace;}
+  .steps strong{color:var(--text);}
+  code{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--text);}
+
+  footer{
+    margin-top:44px;display:flex;flex-direction:column;gap:16px;align-items:center;
+    font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-muted);
+    text-align:center;
+  }
+  .support{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+  .support img{height:34px;display:block;}
+  .footer-links{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;align-items:center;}
+  .footer-copy{color:var(--text-muted);}
+
+  esp-web-install-button{
+    --esp-tools-button-color: var(--brass);
+    --esp-tools-button-text-color: var(--ink);
+    --esp-tools-button-border-radius: 6px;
+    display:block;
+  }
+</style>
+</head>
+<body>
+
+  <p class="eyebrow">OK1CDJ / M5AtomS3 Compass</p>
+
+  <header class="hero">
+    <h1>Install M5AtomS3 Compass firmware</h1>
+    <p class="lede">Tilt-compensated antenna compass: azimuth and elevation on the AtomS3 display and in your browser over WiFi. Flash it straight from this page &mdash; no IDE, no drivers.</p>
+    <div class="badges">
+      <span class="badge">M5Stack AtomS3</span>
+      <span class="badge">ESP32-S3</span>
+      <span class="badge">GY-511 (LSM303D) / QMC5883L</span>
+      <span class="badge" id="fw-version">firmware &mdash;</span>
+    </div>
+  </header>
+
+  <div class="rose-wrap">
+    <svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Compass needle settling on north">
+      <circle cx="60" cy="60" r="54" fill="none" stroke="var(--hairline)" stroke-width="2"/>
+      <g stroke="var(--text-muted)" stroke-width="2">
+        <line x1="60" y1="8" x2="60" y2="16"/><line x1="60" y1="104" x2="60" y2="112"/>
+        <line x1="8" y1="60" x2="16" y2="60"/><line x1="104" y1="60" x2="112" y2="60"/>
+      </g>
+      <text x="60" y="30" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12" fill="var(--cyan)">N</text>
+      <g class="needle">
+        <polygon points="60,22 67,60 53,60" fill="var(--brass)"/>
+        <polygon points="60,98 67,60 53,60" fill="var(--hairline)"/>
+        <circle cx="60" cy="60" r="4" fill="var(--text)"/>
+      </g>
+    </svg>
+  </div>
+  <p class="rose-caption" aria-hidden="true">AZ 000&deg; &middot; EL 00&deg;</p>
+
+  <main class="grid">
+    <section class="panel checklist">
+      <h2>Before you connect</h2>
+      <ul>
+        <li><strong>Browser</strong> &mdash; Chrome, Edge, or Brave on a desktop or laptop. Web Serial doesn't exist in Safari or Firefox, and not at all on iPhone or iPad.</li>
+        <li><strong>Cable</strong> &mdash; a USB-C cable that carries data, not a charge-only one.</li>
+        <li><strong>Board</strong> &mdash; M5Stack AtomS3 (the version with the display).</li>
+        <li><strong>Sensor</strong> &mdash; GY-511 on the Grove port, or QMC5883L on the G38/G39 header pins. It is detected automatically and can be connected after flashing.</li>
+      </ul>
+    </section>
+
+    <section class="panel install">
+      <h2>Connect &amp; flash</h2>
+      <esp-web-install-button manifest="manifest.json">
+        <button slot="activate" class="install-btn">Connect device</button>
+        <span slot="unsupported" class="notice">
+          This browser can't flash over USB. Open this page in Chrome, Edge, or Brave on a computer instead.
+        </span>
+        <span slot="not-allowed" class="notice">
+          This page needs to be loaded over HTTPS for the browser to allow a USB connection.
+        </span>
+      </esp-web-install-button>
+      <p class="hint">Click connect and choose the AtomS3 serial port from the browser prompt.</p>
+      <p class="hint"><strong>Updating?</strong> Leave &ldquo;Erase device&rdquo; unchecked: erasing removes the saved WiFi networks and the sensor calibration.</p>
+    </section>
+  </main>
+
+  <section class="panel steps">
+    <h2>If the device does not connect</h2>
+    <ol>
+      <li>Keep the AtomS3 plugged in.</li>
+      <li>Hold the reset button on the side for about 2 seconds, until the green LED lights up.</li>
+      <li>Release it: the AtomS3 is now in download mode.</li>
+      <li>Click &ldquo;Connect device&rdquo; above and pick the port.</li>
+      <li>After flashing, press the reset button once to start the firmware.</li>
+    </ol>
+  </section>
+
+  <section class="panel steps">
+    <h2>After flashing</h2>
+    <ol>
+      <li><strong>WiFi:</strong> without a known network the AtomS3 opens the access point <code>Compass_Setup</code>. Connect to it with a phone and pick your network on the setup page. Then open <code>http://compass.local</code>.</li>
+      <li><strong>Calibrate:</strong> hold the button under the display for 2&ndash;5 seconds. Turn the sensor in all directions for 30 seconds, then place it on a level surface.</li>
+      <li><strong>In the field:</strong> hold the button under the display while pressing reset to start with WiFi off and save battery.</li>
+    </ol>
+  </section>
+
+  <footer>
+    <div class="support">
+      <a href="https://buymeacoffee.com/ok1cdj" target="_blank" rel="noopener">
+        <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee" loading="lazy">
+      </a>
+      <a href="https://revolut.me/ok1cdj" target="_blank" rel="noopener">
+        <img src="https://img.shields.io/badge/Revolut-Pay-0666EB?style=for-the-badge&logo=revolut&logoColor=white" alt="Pay with Revolut" loading="lazy">
+      </a>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/ok1cdj/M5AtomS3-compass" target="_blank" rel="noopener">This project on GitHub</a>
+      <span>&middot;</span>
+      <a href="https://apps.ok1cdj.com" target="_blank" rel="noopener">More apps by OK1CDJ</a>
+    </div>
+    <div class="footer-copy">&copy; 2026 Ondrej Kolonicny (OK1CDJ)</div>
+  </footer>
+
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <script>
+    fetch('manifest.json').then(function(r){ return r.json(); }).then(function(m){
+      var el = document.getElementById('fw-version');
+      if(el && m.version) el.textContent = 'firmware v' + m.version;
+    }).catch(function(){
+      var el = document.getElementById('fw-version');
+      if(el) el.textContent = 'version unknown';
+    });
+  </script>
+
+</body>
+</html>

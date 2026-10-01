@@ -1,0 +1,54 @@
+name: Build firmware
+
+# Runs only on a version tag. Builds the firmware and attaches the merged
+# image to the GitHub Release for that tag; the page deploy (pages.yml) picks
+# it up from there. Does NOT touch GitHub Pages.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create the release / upload the asset
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build firmware
+        run: pio run -e M5AtomS3
+
+      - name: Attach firmware to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          cp .pio/build/M5AtomS3/firmware.factory.bin .
+          # Create the release if the tag doesn't have one yet, then upload.
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --notes "M5AtomS3 Compass firmware $TAG"
+          fi
+          gh release upload "$TAG" firmware.factory.bin --clobber

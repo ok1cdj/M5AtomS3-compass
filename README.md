@@ -73,6 +73,12 @@ The main dependencies are configured in `platformio.ini`:
 
 ## How to Use
 
+### Web Installer
+
+The easiest way: open **https://ok1cdj.github.io/M5AtomS3-compass/** in Chrome, Edge or Brave, connect the AtomS3 with a USB-C cable and click *Connect device*. The page flashes the latest released firmware; no IDE or drivers are needed. When updating, do not erase the device, otherwise the saved WiFi networks and the calibration are lost.
+
+Releases are built by GitHub Actions: pushing a tag `v*` builds the firmware and attaches it to the release, then the install page is redeployed with it (see `docs/NOTES-for-ci.md`).
+
 ### Building and Uploading
 
 1. Clone this repository.
