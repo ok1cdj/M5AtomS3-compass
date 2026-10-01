@@ -8,6 +8,7 @@
 #include "sensors.h"
 #include "network.h"
 #include "web.h"
+#include "battery.h"
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
@@ -50,6 +51,9 @@ bool declinationMode = false;
 unsigned long lastDeclinationSetTime = 0;
 
 uint32_t pressStartTime = 0;
+
+const int BATTERY_WARN_PERCENT = 25;
+const int BATTERY_LOW_PERCENT = 10;
 
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_DATA) {
@@ -153,6 +157,7 @@ void setup() {
 
   sensorsBegin();
   loadCalibration();
+  batteryBegin();
   M5.Lcd.setRotation(0);
 
   ws.onEvent(onWsEvent);
@@ -173,6 +178,7 @@ void setup() {
 void loop() {
   int a;
   M5.update();
+  batteryUpdate();
 
   if (declinationMode) {
     if (M5.BtnA.wasReleased()) {
@@ -293,6 +299,16 @@ void loop() {
       }
       canvas.setTextColor(WHITE); // Reset text color
 
+      // Battery level (only with the Atomic Battery Base)
+      if (batteryPresent()) {
+          int percent = batteryPercent();
+          canvas.setTextSize(1);
+          canvas.setTextDatum(TR_DATUM); // Top-Right datum
+          canvas.setTextColor(percent <= BATTERY_LOW_PERCENT ? RED : (percent <= BATTERY_WARN_PERCENT ? ORANGE : GREEN));
+          canvas.drawString(String(percent) + "%", canvas.width() - 1, 2);
+          canvas.setTextColor(WHITE);
+      }
+
       // Red triangle arrow
       int centerX = canvas.width() / 2;
       canvas.fillTriangle(centerX, 25, centerX - 8, 40, centerX + 8, 40, RED);
@@ -324,11 +340,17 @@ void loop() {
 
       canvas.pushSprite(0, 0);
       // Raw sensor data is included for remote diagnostics of axis mapping and calibration
-      char json_data[320];
+      char bat_json[40];
+      if (batteryPresent()) {
+        snprintf(bat_json, sizeof(bat_json), "{\"v\":%.2f,\"p\":%d}", batteryVoltage(), batteryPercent());
+      } else {
+        strcpy(bat_json, "null");
+      }
+      char json_data[360];
       snprintf(json_data, sizeof(json_data),
-               "{\"azimuth\":%d, \"elev\":%d, \"sensor\":\"%s\", \"acc\":[%.3f,%.3f,%.3f], \"raw\":[%d,%d,%d], \"off\":[%d,%d,%d], \"scl\":[%.3f,%.3f,%.3f], \"dip\":%.1f}",
+               "{\"azimuth\":%d, \"elev\":%d, \"sensor\":\"%s\", \"acc\":[%.3f,%.3f,%.3f], \"raw\":[%d,%d,%d], \"off\":[%d,%d,%d], \"scl\":[%.3f,%.3f,%.3f], \"dip\":%.1f, \"bat\":%s}",
                a, (int)elevation, sensorName(), accX, accY, accZ, lastRaw[0], lastRaw[1], lastRaw[2],
-               offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ, dip);
+               offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ, dip, bat_json);
       ws.textAll(json_data);
       previousMillis = currentMillis;
     }

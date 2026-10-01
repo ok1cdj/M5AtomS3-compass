@@ -43,10 +43,17 @@
             font-size: 4vmin;
             vertical-align: super;
         }
+        #battery {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 5vmin;
+        }
     </style>
 </head>
 <body>
     <a href="/settings" style="position: absolute; top: 20px; right: 20px; font-size: 8vmin; color: #33FF33; text-decoration: none;">&#9881;</a>
+    <div id="battery"></div>
     <div id="container">
         <div id="azimuth-container">
             <span id="azimuthValue">...</span>
@@ -83,6 +90,13 @@
                 const data = JSON.parse(event.data);
                 document.getElementById('azimuthValue').innerHTML = data.azimuth;
                 document.getElementById('elevValue').innerHTML = data.elev;
+                const battery = document.getElementById('battery');
+                if (data.bat) {
+                    battery.innerText = 'BAT ' + data.bat.p + '% ' + data.bat.v.toFixed(2) + 'V';
+                    battery.style.color = data.bat.p <= 10 ? '#FF3333' : (data.bat.p <= 25 ? '#FFAA33' : '#33FF33');
+                } else {
+                    battery.innerText = '';
+                }
             } catch (e) {
                 console.error('Error parsing JSON:', e);
             }

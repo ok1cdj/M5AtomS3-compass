@@ -14,6 +14,7 @@ A digital compass project for the M5AtomS3 using an external QMC5883L magnetomet
 - Status bars for calibration and WiFi status.
 - Support for multiple WiFi networks; the device remembers up to 5 previously used networks and automatically connects (and reconnects if the connection drops).
 - Works offline: if no WiFi is available, the compass keeps running without the web interface.
+- Battery level on the display and in the web interface when powered by the Atomic Battery Base (voltage measured on G8); hidden with other power sources such as TailBat or USB.
 - Power optimization by reducing CPU frequency and disabling Bluetooth.
 
 ## Hardware
@@ -24,6 +25,11 @@ A digital compass project for the M5AtomS3 using an external QMC5883L magnetomet
   - **QMC5883L magnetometer module**: used together with the AtomS3 internal accelerometer.
 
 If no sensor is found, the display shows `NO SENSOR`; WiFi and the web interface keep running.
+
+### Power
+
+- **Atomic Battery Base** (200 mAh): the battery voltage is measured on G8 through a 1:2 divider. The display shows the charge level in the top right corner (orange at 25 % and below, red at 10 % and below); the web page shows the level and the voltage.
+- **TailBat** or USB: no battery measurement; the battery indicator is hidden. The battery is detected automatically from a plausible and stable voltage on G8.
 
 ### 3D Printed Mount
 
