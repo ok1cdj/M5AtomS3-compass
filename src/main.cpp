@@ -9,6 +9,7 @@
 #include "network.h"
 #include "web.h"
 #include "battery.h"
+#include "mag_calibration.h"
 
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
@@ -38,6 +39,12 @@ int offsetY = 0;
 int offsetZ = 0;
 const unsigned long CALIBRATION_TIME_MS = 30000;
 const unsigned long LEVEL_CALIBRATION_TIME_MS = 3000;
+// Magnetic inclination for the Z offset when the sensor can only be turned around the vertical
+// (antenna boom). About 66 deg in Central Europe; see the NOAA magnetic field calculator.
+const float MAGNETIC_INCLINATION_DEG = 66.0;
+// Samples kept for the calibration fit, enough for 30 s at 50 Hz
+const int CALIBRATION_MAX_SAMPLES = 1600;
+static int16_t calibrationSamples[CALIBRATION_MAX_SAMPLES][3];
 // Per-axis gain correction (soft-iron / sensor gain mismatch)
 float scaleX = 1.0;
 float scaleY = 1.0;
@@ -397,15 +404,22 @@ void loop() {
   }
 }
 
-void runCalibration() {
-  int minX = 32767, maxX = -32767;
-  int minY = 32767, maxY = -32767;
-  int minZ = 32767, maxZ = -32767;
+void showCalibrationResult(uint16_t color, const char *line1, const char *line2) {
+  canvas.fillSprite(color);
+  canvas.setTextDatum(MC_DATUM);
+  canvas.setTextSize(2);
+  canvas.drawString(line1, canvas.width() / 2, 50);
+  canvas.drawString(line2, canvas.width() / 2, 80);
+  canvas.pushSprite(0, 0);
+  delay(2000);
+}
 
-  // Every axis must point both along and against the field, so the device
-  // has to be turned in all directions (incl. upside down), not only flat
+void runCalibration() {
+  // Turn the sensor slowly: in all directions when possible, otherwise (antenna boom)
+  // at least one full turn around the vertical while level
   unsigned long startTime = millis();
   int lastSecondsLeft = -1;
+  int count = 0;
   while (millis() - startTime < CALIBRATION_TIME_MS) {
     int secondsLeft = (CALIBRATION_TIME_MS - (millis() - startTime) + 999) / 1000;
     if (secondsLeft != lastSecondsLeft) {
@@ -415,40 +429,40 @@ void runCalibration() {
       canvas.setTextSize(3);
       canvas.drawString("CAL " + String(secondsLeft), canvas.width() / 2, 35);
       canvas.setTextSize(2);
-      canvas.drawString("Rotate in", canvas.width() / 2, 75);
-      canvas.drawString("all dirs", canvas.width() / 2, 95);
+      canvas.drawString("Turn 360", canvas.width() / 2, 75);
+      canvas.drawString("slowly", canvas.width() / 2, 95);
       canvas.pushSprite(0, 0);
     }
 
     int rawX, rawY, rawZ;
-    if (!readMagRawWait(rawX, rawY, rawZ)) continue;
-
-    if (rawX < minX) minX = rawX;
-    if (rawX > maxX) maxX = rawX;
-    if (rawY < minY) minY = rawY;
-    if (rawY > maxY) maxY = rawY;
-    if (rawZ < minZ) minZ = rawZ;
-    if (rawZ > maxZ) maxZ = rawZ;
-
+    if (readMagRawWait(rawX, rawY, rawZ) && count < CALIBRATION_MAX_SAMPLES) {
+      calibrationSamples[count][0] = rawX;
+      calibrationSamples[count][1] = rawY;
+      calibrationSamples[count][2] = rawZ;
+      count++;
+    }
     M5.update(); // Keep M5 services running
   }
-  
-  offsetX = (maxX + minX) / 2;
-  offsetY = (maxY + minY) / 2;
-  offsetZ = (maxZ + minZ) / 2;
 
-  // Equalize axis gains: scale each axis range to the average range
-  float rangeX = maxX - minX, rangeY = maxY - minY, rangeZ = maxZ - minZ;
-  float avgRange = (rangeX + rangeY + rangeZ) / 3.0;
-  if (rangeX > 100 && rangeY > 100 && rangeZ > 100) {
-    scaleX = avgRange / rangeX;
-    scaleY = avgRange / rangeY;
-    scaleZ = avgRange / rangeZ;
-  } else {
-    scaleX = scaleY = scaleZ = 1.0; // not enough rotation for gain correction
+  MagCalibration fit = fitMagCalibration(calibrationSamples, count, MAGNETIC_INCLINATION_DEG);
+  if (!fit.ok) {
+    M5.Log.printf("Calibration failed (%d samples), previous calibration kept\n", count);
+    showCalibrationResult(RED, "CAL FAILED", "turn more");
+    canvas.fillSprite(BLACK);
+    canvas.pushSprite(0, 0);
+    return;
   }
-  M5.Log.printf("Calibration: offsets %d, %d, %d, ranges %.0f, %.0f, %.0f, scales %.3f, %.3f, %.3f\n",
-                offsetX, offsetY, offsetZ, rangeX, rangeY, rangeZ, scaleX, scaleY, scaleZ);
+  offsetX = lround(fit.offset[0]);
+  offsetY = lround(fit.offset[1]);
+  offsetZ = lround(fit.offset[2]);
+  scaleX = fit.scale[0];
+  scaleY = fit.scale[1];
+  scaleZ = fit.scale[2];
+  M5.Log.printf("Calibration (%s, %d samples): offsets %d, %d, %d, scales %.3f, %.3f, %.3f\n",
+                fit.horizontalOnly ? "horizontal" : "3D", count,
+                offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ);
+  showCalibrationResult(DARKGREEN, fit.horizontalOnly ? "CAL 2D OK" : "CAL 3D OK",
+                        fit.horizontalOnly ? "Z by incl." : "all axes");
 
   // --- Accelerometer level step (replaces gyro calibration: the gyro is not used) ---
   canvas.fillSprite(BLUE);

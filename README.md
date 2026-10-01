@@ -120,7 +120,10 @@ To ensure accurate readings, calibrate the magnetometer and the accelerometer le
 1.  **Press and hold the built-in button for 2 to 5 seconds, then release** to start the calibration mode.
 
 **Stage 1: Magnetometer Calibration**
-1.  The screen will turn **RED** and show a countdown. For the next **30 seconds**, slowly rotate the device in all directions, including on its sides and upside down (like drawing a figure-eight in the air). Every axis must point both along and against the magnetic field, otherwise the calibration is incomplete. Keep away from metal and electronics.
+1.  The screen will turn **RED** and show a countdown. For the next **30 seconds**, turn the sensor slowly. Keep away from metal and electronics.
+    - **Sensor in hand:** rotate it in all directions, including on its sides and upside down (like drawing a figure-eight in the air). All three axes are calibrated (`CAL 3D OK`).
+    - **Sensor mounted on an antenna boom:** keep the boom level and turn it at least one full turn (better two) around the mast. Only the horizontal axes can be measured this way; the vertical axis offset is derived from the magnetic inclination (`MAGNETIC_INCLINATION_DEG` in `src/main.cpp`, 66° for Central Europe) and the screen shows `CAL 2D OK`. Do not run the rotator motor during calibration, its magnet and current disturb the field.
+2.  The offsets and axis gains are fitted to all samples (axis-aligned ellipsoid). If the sensor was not turned enough, the screen shows `CAL FAILED` and the previous calibration is kept.
 
 **Stage 2: Level Calibration**
 1.  After the magnetometer calibration, the screen will turn **BLUE** and prompt you to place the device on a still, flat surface.
