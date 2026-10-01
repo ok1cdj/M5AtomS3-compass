@@ -37,13 +37,26 @@ bool calibrated = false;
 int offsetX = 0;
 int offsetY = 0;
 int offsetZ = 0;
-const unsigned long CALIBRATION_TIME_MS = 30000;
 const unsigned long LEVEL_CALIBRATION_TIME_MS = 3000;
 // Magnetic inclination for the Z offset when the sensor can only be turned around the vertical
 // (antenna boom). About 66 deg in Central Europe; see the NOAA magnetic field calculator.
 const float MAGNETIC_INCLINATION_DEG = 66.0;
-// Samples kept for the calibration fit, enough for 30 s at 50 Hz
-const int CALIBRATION_MAX_SAMPLES = 1600;
+// Guided calibration: the screen tells what to do; samples are collected only during the
+// phases, not while the antenna is being moved to the next position
+struct CalibrationPhase {
+  const char *title;
+  const char *action;
+  unsigned long durationMs;
+};
+const CalibrationPhase CALIBRATION_PHASES[] = {
+  {"LEVEL", "Turn 360", 30000},
+  {"EL 30", "Turn 360", 30000},
+  {"ROLL L 90", "Hold", 15000},
+  {"ROLL R 90", "Hold", 15000},
+};
+const unsigned long CALIBRATION_MOVE_TIME_MS = 8000; // to move to the next position
+// Samples kept for the calibration fit, enough for all phases at 50 Hz
+const int CALIBRATION_MAX_SAMPLES = 4800;
 static int16_t calibrationSamples[CALIBRATION_MAX_SAMPLES][3];
 // Per-axis gain correction (soft-iron / sensor gain mismatch)
 float scaleX = 1.0;
@@ -414,34 +427,62 @@ void showCalibrationResult(uint16_t color, const char *line1, const char *line2)
   delay(2000);
 }
 
-void runCalibration() {
-  // Turn the sensor slowly: in all directions when possible, otherwise (antenna boom)
-  // at least one full turn around the vertical while level
-  unsigned long startTime = millis();
+// Text size 2 fits 10 characters on the 128 px display
+void drawCalibrationScreen(uint16_t color, const String &step, const char *title, const char *action, int secondsLeft) {
+  canvas.fillSprite(color);
+  canvas.setTextDatum(MC_DATUM);
+  canvas.setTextSize(1);
+  canvas.drawString(step, canvas.width() / 2, 10);
+  canvas.setTextSize(2);
+  canvas.drawString(title, canvas.width() / 2, 35);
+  canvas.drawString(action, canvas.width() / 2, 60);
+  canvas.setTextSize(3);
+  canvas.drawString(String(secondsLeft), canvas.width() / 2, 100);
+  canvas.pushSprite(0, 0);
+}
+
+// Waits while the antenna is moved to the next position; no samples are taken
+void calibrationMovePause(const char *nextTitle) {
+  unsigned long start = millis();
   int lastSecondsLeft = -1;
-  int count = 0;
-  while (millis() - startTime < CALIBRATION_TIME_MS) {
-    int secondsLeft = (CALIBRATION_TIME_MS - (millis() - startTime) + 999) / 1000;
+  while (millis() - start < CALIBRATION_MOVE_TIME_MS) {
+    int secondsLeft = (CALIBRATION_MOVE_TIME_MS - (millis() - start) + 999) / 1000;
     if (secondsLeft != lastSecondsLeft) {
       lastSecondsLeft = secondsLeft;
-      canvas.fillSprite(RED);
-      canvas.setTextDatum(MC_DATUM);
-      canvas.setTextSize(3);
-      canvas.drawString("CAL " + String(secondsLeft), canvas.width() / 2, 35);
-      canvas.setTextSize(2);
-      canvas.drawString("Turn 360", canvas.width() / 2, 75);
-      canvas.drawString("slowly", canvas.width() / 2, 95);
-      canvas.pushSprite(0, 0);
+      drawCalibrationScreen(ORANGE, "Move to next position", nextTitle, "", secondsLeft);
     }
+    M5.update();
+    delay(20);
+  }
+}
 
-    int rawX, rawY, rawZ;
-    if (readMagRawWait(rawX, rawY, rawZ) && count < CALIBRATION_MAX_SAMPLES) {
-      calibrationSamples[count][0] = rawX;
-      calibrationSamples[count][1] = rawY;
-      calibrationSamples[count][2] = rawZ;
-      count++;
+void runCalibration() {
+  // Sensor in hand: turn it in all directions during all phases. On an antenna boom follow
+  // the phases: a level turn, a turn at 30 deg elevation, then 90 deg rolls to both sides
+  int count = 0;
+  const int phaseCount = sizeof(CALIBRATION_PHASES) / sizeof(CALIBRATION_PHASES[0]);
+  for (int p = 0; p < phaseCount; p++) {
+    const CalibrationPhase &phase = CALIBRATION_PHASES[p];
+    if (p > 0) calibrationMovePause(phase.title);
+
+    unsigned long start = millis();
+    int lastSecondsLeft = -1;
+    while (millis() - start < phase.durationMs) {
+      int secondsLeft = (phase.durationMs - (millis() - start) + 999) / 1000;
+      if (secondsLeft != lastSecondsLeft) {
+        lastSecondsLeft = secondsLeft;
+        drawCalibrationScreen(RED, "CAL " + String(p + 1) + "/" + String(phaseCount), phase.title,
+                              phase.action, secondsLeft);
+      }
+      int rawX, rawY, rawZ;
+      if (readMagRawWait(rawX, rawY, rawZ) && count < CALIBRATION_MAX_SAMPLES) {
+        calibrationSamples[count][0] = rawX;
+        calibrationSamples[count][1] = rawY;
+        calibrationSamples[count][2] = rawZ;
+        count++;
+      }
+      M5.update(); // Keep M5 services running
     }
-    M5.update(); // Keep M5 services running
   }
 
   MagCalibration fit = fitMagCalibration(calibrationSamples, count, MAGNETIC_INCLINATION_DEG);
@@ -468,13 +509,13 @@ void runCalibration() {
   canvas.fillSprite(BLUE);
   canvas.setTextDatum(MC_DATUM);
   canvas.setTextSize(2);
-  canvas.drawString("Place device", canvas.width() / 2, 45);
-  canvas.drawString("flat & still", canvas.width() / 2, 75);
+  canvas.drawString("Level it", canvas.width() / 2, 45);
+  canvas.drawString("keep still", canvas.width() / 2, 75);
   canvas.pushSprite(0, 0);
   delay(3000);
 
   canvas.fillSprite(BLUE);
-  canvas.drawString("Leveling...", canvas.width() / 2, 60);
+  canvas.drawString("Leveling", canvas.width() / 2, 60);
   canvas.pushSprite(0, 0);
 
   float sumX = 0, sumY = 0;

@@ -3,7 +3,10 @@
 
 static const int MIN_SAMPLES = 20;
 static const float MIN_RANGE = 100;          // raw counts; less means the sensor was not turned
-static const float FULL_3D_RANGE_RATIO = 0.5; // Z range vs X/Y range needed for a full fit
+// Z range vs X/Y range needed for a full fit: a level turn gives ~0, turning in hand or the
+// guided boom sequence with 90 deg rolls ~1-1.6. A turn at 30 deg elevation alone (~0.5) does
+// not determine Z well, so it falls back to the inclination
+static const float FULL_3D_RANGE_RATIO = 0.8;
 static const int MAX_PARAMS = 6;
 
 // Solves the n x n system m * x = v by Gaussian elimination with partial pivoting

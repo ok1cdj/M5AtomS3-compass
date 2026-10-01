@@ -119,11 +119,21 @@ To ensure accurate readings, calibrate the magnetometer and the accelerometer le
 
 1.  **Press and hold the built-in button for 2 to 5 seconds, then release** to start the calibration mode.
 
-**Stage 1: Magnetometer Calibration**
-1.  The screen will turn **RED** and show a countdown. For the next **30 seconds**, turn the sensor slowly. Keep away from metal and electronics.
-    - **Sensor in hand:** rotate it in all directions, including on its sides and upside down (like drawing a figure-eight in the air). All three axes are calibrated (`CAL 3D OK`).
-    - **Sensor mounted on an antenna boom:** keep the boom level and turn it at least one full turn (better two) around the mast. Only the horizontal axes can be measured this way; the vertical axis offset is derived from the magnetic inclination (`MAGNETIC_INCLINATION_DEG` in `src/main.cpp`, 66° for Central Europe) and the screen shows `CAL 2D OK`. Do not run the rotator motor during calibration, its magnet and current disturb the field.
-2.  The offsets and axis gains are fitted to all samples (axis-aligned ellipsoid). If the sensor was not turned enough, the screen shows `CAL FAILED` and the previous calibration is kept.
+**Stage 1: Magnetometer Calibration (guided)**
+
+The screen shows four phases with a countdown; between them an orange screen gives 8 seconds to move to the next position (no samples are taken then, so a running rotator motor does not disturb the calibration). Keep away from metal and electronics.
+
+| Phase | Antenna boom | Sensor in hand |
+|-------|--------------|----------------|
+| 1/4 `LEVEL`, 30 s | boom level, turn it one full turn around the mast | turn it in all directions |
+| 2/4 `EL 30`, 30 s | boom at about 30° elevation, turn it one full turn | turn it in all directions |
+| 3/4 `ROLL L 90`, 15 s | rolled 90° to the left around the boom, hold still | turn it in all directions |
+| 4/4 `ROLL R 90`, 15 s | rolled 90° to the right around the boom, hold still | turn it in all directions |
+
+The offsets and axis gains are fitted to all samples (axis-aligned ellipsoid) and the result is shown:
+- `CAL 3D OK`: all three axes were measured (the rolls or turning in hand put the vertical axis horizontal).
+- `CAL 2D OK`: only a level turn was possible; the vertical axis offset is derived from the magnetic inclination (`MAGNETIC_INCLINATION_DEG` in `src/main.cpp`, 66° for Central Europe). Fine for level use, less accurate with elevation.
+- `CAL FAILED`: the sensor was not turned enough; the previous calibration is kept.
 
 **Stage 2: Level Calibration**
 1.  After the magnetometer calibration, the screen will turn **BLUE** and prompt you to place the device on a still, flat surface.
