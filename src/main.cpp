@@ -78,17 +78,22 @@ String calKey(const char* name) {
   return String(sensorKeyPrefix()) + name;
 }
 
+// Preferences::getFloat logs an error for a missing key, so check it first
+float getFloatOr(const String &key, float defaultValue) {
+  return preferences.isKey(key.c_str()) ? preferences.getFloat(key.c_str(), defaultValue) : defaultValue;
+}
+
 void loadCalibration() {
   preferences.begin("compass", true);
   calibrated = preferences.getBool(calKey("cal").c_str(), false);
   offsetX = preferences.getInt(calKey("offX").c_str(), 0);
   offsetY = preferences.getInt(calKey("offY").c_str(), 0);
   offsetZ = preferences.getInt(calKey("offZ").c_str(), 0);
-  scaleX = preferences.getFloat(calKey("sclX").c_str(), 1.0);
-  scaleY = preferences.getFloat(calKey("sclY").c_str(), 1.0);
-  scaleZ = preferences.getFloat(calKey("sclZ").c_str(), 1.0);
-  accOffX = preferences.getFloat(calKey("accX").c_str(), 0.0);
-  accOffY = preferences.getFloat(calKey("accY").c_str(), 0.0);
+  scaleX = getFloatOr(calKey("sclX"), 1.0);
+  scaleY = getFloatOr(calKey("sclY"), 1.0);
+  scaleZ = getFloatOr(calKey("sclZ"), 1.0);
+  accOffX = getFloatOr(calKey("accX"), 0.0);
+  accOffY = getFloatOr(calKey("accY"), 0.0);
   preferences.end();
   M5.Log.printf("Calibration (%s): %s, offsets %d, %d, %d, scales %.3f, %.3f, %.3f, acc %.3f, %.3f\n",
                 sensorName(), calibrated ? "yes" : "no", offsetX, offsetY, offsetZ,
