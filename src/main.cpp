@@ -267,6 +267,12 @@ void loop() {
       canvas.setTextColor(RED);
       canvas.drawString("NO SENSOR", canvas.width() / 2, canvas.height() / 2);
       canvas.setTextColor(WHITE);
+      if (batteryPresent()) {
+        canvas.setTextSize(1);
+        canvas.drawString("BAT " + String(batteryPercent()) + "% " + String(batteryVoltage(), 2) + "V",
+                          canvas.width() / 2, canvas.height() / 2 + 20);
+      }
+      drawWiFiStatusBar();
       canvas.pushSprite(0, 0);
       previousMillis = currentMillis;
     }

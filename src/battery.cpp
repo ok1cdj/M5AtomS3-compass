@@ -1,5 +1,6 @@
 #include "battery.h"
 #include <Arduino.h>
+#include <M5Unified.h>
 #include <math.h>
 
 static const int BATTERY_PIN = 8;
@@ -27,8 +28,8 @@ static float filteredV = 0;
 static bool present = false;
 
 void batteryBegin() {
-  pinMode(BATTERY_PIN, INPUT);
-  analogSetPinAttenuation(BATTERY_PIN, ADC_11db);
+  // The default ADC attenuation (11 dB) covers the divided battery voltage
+  analogReadMilliVolts(BATTERY_PIN);
 }
 
 static float readVoltage() {
@@ -62,7 +63,11 @@ void batteryUpdate() {
   if (windowCount < WINDOW_SIZE) windowCount++;
 
   filteredV = (filteredV == 0) ? v : filteredV + FILTER_ALPHA * (v - filteredV);
+  bool wasPresent = present;
   present = windowIsBattery();
+  if (present != wasPresent) {
+    M5.Log.printf("Battery %s, %.2f V\n", present ? "detected" : "not detected", filteredV);
+  }
 }
 
 bool batteryPresent() {
