@@ -25,7 +25,7 @@ cable_clearance = 0.5;  // per side
 cable_side = -1;        // -1: cable leaves towards -Y (away from the arrow), +1: towards +Y
 
 // --- Body ---
-floor_t = 2.0;          // between the boom and the pocket floor
+floor_t = 2.0;          // minimum between the boom and the pocket floor
 wall = 2.4;             // pocket side walls (6 perimeters at 0.4 mm)
 
 // --- Lid, sunk into a recess and glued ---
@@ -34,12 +34,13 @@ lid_lip = 1.0;          // how far the lid overlaps the wall top
 lid_clearance = 0.15;   // per side
 arrow_depth = 0.6;      // engraved direction arrow
 
-// --- Zip ties, run in channels hugging the top of the boom ---
+// --- Zip ties, run through closed tunnels above the boom: tightening pulls the holder down ---
 strap_w = 5;            // up to 4.8 mm zip ties
 strap_t = 1.5;
 strap_clearance = 0.4;  // per side
-strap_margin = 2.0;     // material between a channel and the holder end
-min_side = 1.6;         // body side wall next to where a channel leaves the bottom face
+strap_margin = 2.0;     // material between a tunnel and the holder end
+tunnel_gap = 2.0;       // material between the boom and a tunnel, pressed down by the strap
+groove_bridge = 1.2;    // material between the cable groove and the tunnel below it
 
 eps = 0.01;
 $fn = 96;
@@ -49,7 +50,11 @@ pipe_r = pipe_d / 2 + pipe_clearance;
 pocket_x = pcb_x + 2 * pcb_clearance;
 pocket_y = pcb_y + 2 * pcb_clearance;
 pocket_depth = module_h + glue_gap;
-floor_z = pipe_r + floor_t;
+tunnel_h = strap_t + 2 * strap_clearance;
+tunnel_bottom_z = pipe_r + tunnel_gap;
+tunnel_top_z = tunnel_bottom_z + tunnel_h;
+// The cable groove crosses over a tunnel, so the pocket is raised above it when needed
+floor_z = max(pipe_r + floor_t, tunnel_top_z + groove_bridge - pcb_t);
 recess_z = floor_z + pocket_depth;
 top_z = recess_z + lid_t;
 bottom_z = pipe_d / 2 - saddle_depth;
@@ -60,13 +65,9 @@ lid_x = recess_x - 2 * lid_clearance;
 lid_y = recess_y - 2 * lid_clearance;
 
 tunnel_y = strap_w + 2 * strap_clearance;
-tunnel_h = strap_t + 2 * strap_clearance;
 tunnel_center_y = pocket_y / 2 + wall + tunnel_y / 2;
-tunnel_top_z = pipe_d / 2 + tunnel_h;
-tunnel_r = pipe_d / 2 + tunnel_h; // concentric with the boom, so no knife edges at the saddle
-tunnel_exit_x = sqrt(tunnel_r * tunnel_r - bottom_z * bottom_z); // where a channel leaves the bottom
 
-body_x = max(pocket_x + 2 * wall, 2 * (tunnel_exit_x + min_side));
+body_x = pocket_x + 2 * wall;
 body_y = 2 * (tunnel_center_y + tunnel_y / 2 + strap_margin);
 
 cable_slot_w = cable_w + 2 * cable_clearance;
@@ -76,9 +77,9 @@ echo(body = [body_x, body_y, top_z - bottom_z], pocket = [pocket_x, pocket_y, po
      lid = [lid_x, lid_y, lid_t], top_z = top_z);
 
 assert(wall - lid_lip >= 1.2, "recess wall too thin");
-assert(cable_floor_z - tunnel_top_z >= 1.2, "cable groove breaks into a strap tunnel");
+assert(cable_floor_z - tunnel_top_z >= groove_bridge - eps, "cable groove breaks into a strap tunnel");
+assert(top_z - tunnel_top_z >= 2, "too little material above a strap tunnel");
 assert(body_x / 2 > sqrt(pipe_r * pipe_r - bottom_z * bottom_z), "saddle wider than the body");
-assert(tunnel_exit_x < body_x / 2 - min_side + eps, "zip tie channel breaks out of the body side");
 assert(cable_slot_w < pocket_x, "cable slot wider than the pocket");
 
 module holder() {
@@ -98,11 +99,10 @@ module holder() {
     translate([-recess_x / 2, -recess_y / 2, recess_z])
       cube([recess_x, recess_y, lid_t + eps]);
 
-    // Zip tie channels over the top of the boom, leaving through the bottom face
+    // Closed zip tie tunnels across the body, above the boom
     for (s = [-1, 1])
-      translate([0, s * tunnel_center_y, 0])
-        rotate([90, 0, 0])
-          cylinder(r = tunnel_r, h = tunnel_y, center = true);
+      translate([-body_x / 2 - eps, s * tunnel_center_y - tunnel_y / 2, tunnel_bottom_z])
+        cube([body_x + 2 * eps, tunnel_y, tunnel_h]);
 
     // Cable groove from the pocket to the holder end, along the boom
     translate([-cable_slot_w / 2,
