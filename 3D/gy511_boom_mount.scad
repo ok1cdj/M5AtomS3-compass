@@ -23,6 +23,8 @@ cable_w = 6;
 cable_t = 1.5;
 cable_clearance = 0.5;  // per side
 cable_side = 1;         // -1: cable leaves towards -Y (away from the arrow), +1: towards +Y
+cable_chamfer = 5;      // 45 deg cut of the corner between pocket and groove, so an off-centre cable can turn in
+cable_chamfer_side = -1; // -1: corner on the -X side (left in top view with the groove up), +1: +X side
 
 // --- Body ---
 floor_t = 2.0;          // minimum between the boom and the pocket floor
@@ -81,6 +83,8 @@ assert(cable_floor_z - tunnel_top_z >= groove_bridge - eps, "cable groove breaks
 assert(top_z - tunnel_top_z >= 2, "too little material above a strap tunnel");
 assert(body_x / 2 > sqrt(pipe_r * pipe_r - bottom_z * bottom_z), "saddle wider than the body");
 assert(cable_slot_w < pocket_x, "cable slot wider than the pocket");
+assert(cable_slot_w / 2 + cable_chamfer <= pocket_x / 2, "cable chamfer runs past the pocket corner");
+assert(pocket_y / 2 + cable_chamfer <= body_y / 2 - strap_margin, "cable chamfer reaches the holder end");
 
 module holder() {
   difference() {
@@ -109,6 +113,15 @@ module holder() {
                cable_side > 0 ? pocket_y / 2 - eps : -body_y / 2 - eps,
                cable_floor_z])
       cube([cable_slot_w, body_y / 2 - pocket_y / 2 + 2 * eps, top_z - cable_floor_z + eps]);
+
+    // 45 deg chamfer of the pocket/groove corner, same depth as the groove
+    translate([0, 0, cable_floor_z])
+      mirror([cable_chamfer_side > 0 ? 1 : 0, 0, 0])
+        mirror([0, cable_side > 0 ? 0 : 1, 0])
+          linear_extrude(top_z - cable_floor_z + eps)
+            polygon([[-cable_slot_w / 2 + eps, pocket_y / 2 - eps],
+                     [-cable_slot_w / 2 - cable_chamfer, pocket_y / 2 - eps],
+                     [-cable_slot_w / 2 + eps, pocket_y / 2 + cable_chamfer]]);
   }
 }
 
