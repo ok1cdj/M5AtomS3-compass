@@ -37,10 +37,10 @@ static const AxisMap QMC_MAG_MAP = {{0, 1, 2}, {1, 1, 1}};
 // GY-511 mounting not verified yet: identity until measured
 static const AxisMap LSM_MAG_MAP = {{0, 1, 2}, {1, 1, 1}};
 static const AxisMap LSM_ACC_MAP = {{0, 1, 2}, {1, 1, 1}};
-// LSM303D has one set of axes for both sensors. In the boom holder (3D/gy511_boom_mount.scad)
-// the module Y arrow and cable point to the mast, so the module is turned 180 deg about Z
-// against the antenna direction (device +Y)
-static const AxisMap LSM303D_MAP = {{0, 1, 2}, {-1, -1, 1}};
+// LSM303D has one set of axes for both sensors. The GY-511 silkscreen arrows do not match the
+// LSM303D chip axes: measured at N/E/S/W in the boom holder (3D/gy511_boom_mount.scad), the
+// antenna direction (device +Y) is chip +X and device +X is chip -Y (Z stays up)
+static const AxisMap LSM303D_MAP = {{1, 0, 2}, {-1, 1, 1}};
 
 template <typename T>
 static void applyMap(const AxisMap &map, const T in[3], T &x, T &y, T &z) {
@@ -192,8 +192,8 @@ const char* sensorKeyPrefix() {
   switch (currentSet) {
     case SensorSet::QMC5883L_InternalImu: return "q_";
     case SensorSet::LSM303DLHC: return "l_";
-    // Changed with the 180 deg axis map: calibration stored in the old axes is not valid
-    case SensorSet::LSM303D: return "dr_";
+    // Changed with every LSM303D axis map change: calibration stored in old axes is not valid
+    case SensorSet::LSM303D: return "d2_";
     default: return "n_";
   }
 }
