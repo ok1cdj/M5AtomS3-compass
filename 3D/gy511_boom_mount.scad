@@ -24,7 +24,7 @@ cable_t = 1.5;
 cable_clearance = 0.5;  // per side
 cable_side = 1;         // -1: cable leaves towards -Y (away from the arrow), +1: towards +Y
 cable_chamfer = 5;      // 45 deg cut of the corner between pocket and groove, so an off-centre cable can turn in
-cable_chamfer_side = -1; // -1: corner on the -X side (left in top view with the groove up), +1: +X side
+cable_chamfer_side = 1;  // -1: corner on the -X side (left in top view with the groove up), +1: +X side
 
 // --- Body ---
 floor_t = 2.0;          // minimum between the boom and the pocket floor
