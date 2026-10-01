@@ -78,6 +78,29 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 
 void runCalibration(); // Forward declaration
 
+// Set by holding the button during startup; WiFi stays off until the next reset
+bool wifiDisabled = false;
+const unsigned long WIFI_OFF_MESSAGE_MS = 1500;
+
+void drawWiFiStatusBar() {
+  canvas.setTextSize(1);
+  canvas.setTextDatum(BC_DATUM); // Bottom-Center datum
+  if (wifiDisabled) {
+      canvas.setTextColor(DARKGREY);
+      canvas.drawString("WiFi OFF", canvas.width() / 2, canvas.height() - 2);
+  } else if (WiFi.status() == WL_CONNECTED) {
+      canvas.setTextColor(CYAN);
+      canvas.drawString(WiFi.localIP().toString(), canvas.width() / 2, canvas.height() - 2);
+  } else if (networkApActive()) {
+      canvas.setTextColor(YELLOW);
+      canvas.drawString("AP: Compass_Setup", canvas.width() / 2, canvas.height() - 2);
+  } else {
+      canvas.setTextColor(ORANGE);
+      canvas.drawString("WiFi Disconnected", canvas.width() / 2, canvas.height() - 2);
+  }
+  canvas.setTextColor(WHITE); // Reset text color
+}
+
 String calKey(const char* name) {
   return String(sensorKeyPrefix()) + name;
 }
@@ -150,6 +173,22 @@ void setup() {
   M5.begin();
   M5.Log.println("Starting setup...");
   canvas.createSprite(M5.Lcd.width(), M5.Lcd.height());
+
+  // Holding the button during startup disables WiFi (saves battery in the field)
+  M5.update();
+  if (M5.BtnA.isPressed()) {
+    wifiDisabled = true;
+    WiFi.mode(WIFI_OFF);
+    M5.Log.println("WiFi disabled by button at startup");
+    canvas.fillSprite(BLACK);
+    canvas.setTextDatum(MC_DATUM);
+    canvas.setTextSize(2);
+    canvas.setTextColor(ORANGE);
+    canvas.drawString("WiFi OFF", canvas.width() / 2, canvas.height() / 2);
+    canvas.setTextColor(WHITE);
+    canvas.pushSprite(0, 0);
+    delay(WIFI_OFF_MESSAGE_MS);
+  }
   
   preferences.begin("compass", false);
   magneticDeclination = preferences.getInt("decl", 5);
@@ -171,8 +210,10 @@ void setup() {
     sendEmbeddedPage(request, "settings.html");
   });
 
-  networkBegin(server);
-  server.begin();
+  if (!wifiDisabled) {
+    networkBegin(server);
+    server.begin();
+  }
 }
 
 void loop() {
@@ -200,20 +241,7 @@ void loop() {
     // Draw a circle for the degree symbol
     canvas.drawCircle(canvas.width() / 2 + numWidth / 2 + 6, 85 - (8*5)/2 + 4, 4, WHITE);
 
-    // WiFi status bar
-    canvas.setTextSize(1);
-    canvas.setTextDatum(BC_DATUM); // Bottom-Center datum
-    if (WiFi.status() == WL_CONNECTED) {
-        canvas.setTextColor(CYAN);
-        canvas.drawString(WiFi.localIP().toString(), canvas.width() / 2, canvas.height() - 2);
-    } else if (networkApActive()) {
-        canvas.setTextColor(YELLOW);
-        canvas.drawString("AP: Compass_Setup", canvas.width() / 2, canvas.height() - 2);
-    } else {
-        canvas.setTextColor(ORANGE);
-        canvas.drawString("WiFi Disconnected", canvas.width() / 2, canvas.height() - 2);
-    }
-    canvas.setTextColor(WHITE); // Reset text color
+    drawWiFiStatusBar();
 
     canvas.pushSprite(0, 0);
 
@@ -323,20 +351,7 @@ void loop() {
       String elev_str = "Elev: " + String((int)elevation);
       canvas.drawString(elev_str, centerX, 110);
 
-      // WiFi status bar
-      canvas.setTextSize(1);
-      canvas.setTextDatum(BC_DATUM); // Bottom-Center datum
-      if (WiFi.status() == WL_CONNECTED) {
-          canvas.setTextColor(CYAN);
-          canvas.drawString(WiFi.localIP().toString(), canvas.width() / 2, canvas.height() - 2);
-      } else if (networkApActive()) {
-          canvas.setTextColor(YELLOW);
-          canvas.drawString("AP: Compass_Setup", canvas.width() / 2, canvas.height() - 2);
-      } else {
-          canvas.setTextColor(ORANGE);
-          canvas.drawString("WiFi Disconnected", canvas.width() / 2, canvas.height() - 2);
-      }
-      canvas.setTextColor(WHITE); // Reset text color
+      drawWiFiStatusBar();
 
       canvas.pushSprite(0, 0);
       // Raw sensor data is included for remote diagnostics of axis mapping and calibration

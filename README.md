@@ -98,6 +98,7 @@ The device supports multiple WiFi networks. All WiFi handling runs in the backgr
 - On the setup page you can scan for networks, add a network, and see and delete the saved networks. Up to 5 networks are remembered; when a 6th is added, the oldest one is dropped.
 - After a successful connection the access point closes after 10 seconds. If nothing is configured within 5 minutes, it closes and the compass runs offline.
 - If the connection drops while running, the device tries all saved networks again every 30 seconds.
+- **WiFi off:** hold the button under the display while powering on or pressing the reset button on the side, until `WiFi OFF` appears. WiFi stays off until the next reset, which saves battery when no network is needed (e.g. in the field). The bottom status bar shows `WiFi OFF`.
 - While connected, the setup page is available at `http://compass.local/wifi` (or via the settings page).
 
 ### Web Interface
