@@ -143,3 +143,7 @@ Magnetic declination is the angle between magnetic north and true north. For acc
 1.  Open `http://compass.local` in your browser.
 2.  Click the gear icon (`⚙️`) to navigate to the settings page.
 3.  Enter your local declination value and click "Set". The value is saved immediately.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
