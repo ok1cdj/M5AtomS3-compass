@@ -22,7 +22,7 @@ glue_gap = 0.3;         // between the module top and the lid
 cable_w = 6;
 cable_t = 1.5;
 cable_clearance = 0.5;  // per side
-cable_side = -1;        // -1: cable leaves towards -Y (away from the arrow), +1: towards +Y
+cable_side = 1;         // -1: cable leaves towards -Y (away from the arrow), +1: towards +Y
 
 // --- Body ---
 floor_t = 2.0;          // minimum between the boom and the pocket floor
