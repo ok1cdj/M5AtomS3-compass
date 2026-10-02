@@ -2,3 +2,4 @@
 
 .aider*
 include/web_pages.h
+__pycache__/
