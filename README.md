@@ -136,7 +136,7 @@ The offsets and axis gains are fitted to all samples (axis-aligned ellipsoid) an
 - `CAL FAILED`: the sensor was not turned enough; the previous calibration is kept.
 
 **Stage 2: Level Calibration**
-1.  After the magnetometer calibration, the screen will turn **BLUE** and prompt you to place the device on a still, flat surface.
+1.  After the magnetometer calibration, the screen will turn **BLUE** and give 8 seconds to bring the device level (on a boom: back to 0° elevation and roll), showing the live elevation and roll in green when within 5° of level.
 2.  Place the device on a level surface (check it with a spirit level) and wait. The accelerometer zero is measured, which corrects the elevation and the tilt compensation.
 3.  Once both stages are complete, the screen will turn **GREEN** to indicate success. The calculated offsets are saved, and the device will return to normal operation.
 

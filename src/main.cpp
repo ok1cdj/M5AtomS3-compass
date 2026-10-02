@@ -541,16 +541,37 @@ void runCalibration() {
                         fit.horizontalOnly ? "Z by incl." : "all axes");
 
   // --- Accelerometer level step (replaces gyro calibration: the gyro is not used) ---
+  // Time to bring the antenna back level; live elevation and roll show when it is there
+  unsigned long levelMoveStart = millis();
+  while (millis() - levelMoveStart < CALIBRATION_MOVE_TIME_MS) {
+    int secondsLeft = (CALIBRATION_MOVE_TIME_MS - (millis() - levelMoveStart) + 999) / 1000;
+    canvas.fillSprite(BLUE);
+    canvas.setTextDatum(MC_DATUM);
+    canvas.setTextSize(2);
+    canvas.drawString("Level it", canvas.width() / 2, 16);
+    const CalibrationAngle angles[] = {CalibrationAngle::Elevation, CalibrationAngle::Roll};
+    for (int i = 0; i < 2; i++) {
+      float angle = calibrationAngle(angles[i]);
+      if (isnan(angle)) continue;
+      String text = i == 0 ? "EL " + String((int)round(angle))
+                           : String(angle >= 0 ? "R " : "L ") + String((int)round(fabs(angle)));
+      canvas.fillRect(14, 30 + i * 26, canvas.width() - 28, 24, BLACK);
+      canvas.setTextColor(fabs(angle) <= CALIBRATION_ANGLE_TOLERANCE_DEG ? GREEN : YELLOW);
+      canvas.drawString(text, canvas.width() / 2, 42 + i * 26);
+    }
+    canvas.setTextColor(WHITE);
+    canvas.setTextSize(3);
+    canvas.drawString(String(secondsLeft), canvas.width() / 2, 108);
+    canvas.pushSprite(0, 0);
+    M5.update();
+    delay(CALIBRATION_REDRAW_MS);
+  }
+
   canvas.fillSprite(BLUE);
   canvas.setTextDatum(MC_DATUM);
   canvas.setTextSize(2);
-  canvas.drawString("Level it", canvas.width() / 2, 45);
+  canvas.drawString("Leveling", canvas.width() / 2, 50);
   canvas.drawString("keep still", canvas.width() / 2, 75);
-  canvas.pushSprite(0, 0);
-  delay(3000);
-
-  canvas.fillSprite(BLUE);
-  canvas.drawString("Leveling", canvas.width() / 2, 60);
   canvas.pushSprite(0, 0);
 
   float sumX = 0, sumY = 0;
