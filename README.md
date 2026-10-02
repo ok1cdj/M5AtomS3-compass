@@ -10,7 +10,8 @@ A digital compass project for the M5AtomS3 using an external QMC5883L magnetomet
 - On-device calibration of the magnetometer (hard-iron offsets and per-axis gain) and of the accelerometer level; each sensor keeps its own calibration.
 - Tilt-compensated heading, accurate to about ±10° for tilts up to 45°.
 - Calibration data is saved to non-volatile memory and loaded on startup.
-- Magnetic declination can be configured on the device or via the web interface.
+- Magnetic declination can be configured on the device or via the web interface; the magnetic inclination via the web interface.
+- Calibration quality check: the measured inclination is shown after calibration, and `CHECK CAL` warns when the field no longer matches the calibration (sensor replaced, moved near iron).
 - Status bars for calibration and WiFi status.
 - Support for multiple WiFi networks; the device remembers up to 5 previously used networks and automatically connects (and reconnects if the connection drops).
 - Works offline: if no WiFi is available, the compass keeps running without the web interface.
@@ -90,7 +91,7 @@ The web pages in `data/` are embedded into the firmware at build time (gzip-comp
 ### Operation
 
 Once powered on and connected to WiFi, the device starts displaying the current compass heading. The display consists of:
-- A top status bar showing `CALIBRATED` (green) with the current magnetic declination, or `UNCALIBRATED` (red).
+- A top status bar showing `CALIBRATED` (green) with the current magnetic declination, `UNCALIBRATED` (red), or `CHECK CAL` (orange) when the field magnitude differs by more than 20 % or the inclination by more than 8° from the calibration for several seconds. Recalibrate then.
 - A static red triangular arrow below the status bar, which serves as a fixed pointer.
 - The numerical heading value in degrees, centered on the middle of the screen.
 - Below the heading, the current elevation (`Elev`) is displayed.
@@ -111,7 +112,10 @@ The device supports multiple WiFi networks. All WiFi handling runs in the backgr
 
 The device is accessible on your local network via the address `http://compass.local`. The web interface provides:
 - A large, real-time display of the azimuth and elevation.
-- A settings page (accessible via the gear icon `⚙️`) to configure the magnetic declination.
+- A settings page (accessible via the gear icon `⚙️`):
+  - magnetic declination and inclination of your location (find both with the [NOAA magnetic field calculator](https://www.ngdc.noaa.gov/geomag/calculators/magcalc.shtml); e.g. Central Bohemia 5.2° / 66.2°, Thessaloniki 5.4° / 57.9°). The inclination is used by the `CAL 2D` calibration and to check a calibration;
+  - the calibration state of the connected sensor, with the inclination measured at the end of the last calibration;
+  - *Reset calibration*: deletes the calibration of the connected sensor, e.g. after replacing the module with another one of the same type (the firmware cannot tell two modules of the same type apart).
 
 ### Calibration
 
@@ -137,7 +141,7 @@ The offsets and axis gains are fitted to all samples (axis-aligned ellipsoid) an
 
 **Stage 2: Level Calibration**
 1.  After the magnetometer calibration, the screen will turn **BLUE** and give 8 seconds to bring the device level (on a boom: back to 0° elevation and roll), showing the live elevation and roll in green when within 5° of level.
-2.  Place the device on a level surface (check it with a spirit level) and wait. The accelerometer zero is measured, which corrects the elevation and the tilt compensation.
+2.  Keep it level and still. The accelerometer zero is measured, which corrects the elevation and the tilt compensation. The field is measured at the same time: the `DONE` screen shows the measured inclination against the set one (`I 62/58`). After a 3D calibration they should agree within 3° (green); a bigger difference (orange) means iron nearby or an inaccurate calibration, or a wrong inclination setting.
 3.  Once both stages are complete, the screen will turn **GREEN** to indicate success. The calculated offsets are saved, and the device will return to normal operation.
 
 You should re-calibrate whenever the device's magnetic environment changes (e.g., if you mount it in a new location).

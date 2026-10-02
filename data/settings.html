@@ -39,6 +39,13 @@
         button {
             background-color: #333;
         }
+        .hint {
+            font-size: 3.5vmin;
+            max-width: 90vw;
+        }
+        .hint a {
+            color: #33FF33;
+        }
         a.back-link {
             position: absolute;
             top: 20px;
@@ -56,8 +63,20 @@
 
     <div class="setting-container">
         Declination:
-        <input type="number" id="declinationInput" value="5" min="-90" max="90">
+        <input type="number" id="declinationInput" min="-90" max="90">
         <button id="setDeclinationBtn">Set</button>
+    </div>
+    <div class="setting-container">
+        Inclination:
+        <input type="number" id="inclinationInput" min="0" max="90" step="0.1">
+        <button id="setInclinationBtn">Set</button>
+    </div>
+    <div class="setting-container hint">
+        Values for your location: <a href="https://www.ngdc.noaa.gov/geomag/calculators/magcalc.shtml" target="_blank" rel="noopener">NOAA magnetic field calculator</a>
+    </div>
+    <div class="setting-container hint" id="calInfo"></div>
+    <div class="setting-container">
+        <button id="resetCalBtn">Reset calibration</button>
     </div>
     <div class="setting-container">
         <a href="/wifi" style="color: #33FF33;">WiFi networks</a>
@@ -73,6 +92,36 @@
             websocket = new WebSocket(gateway);
             websocket.onopen = onOpen;
             websocket.onclose = onClose;
+            websocket.onmessage = onMessage;
+        }
+
+        // The compass sends its settings on connect and after every change
+        function onMessage(event) {
+            const data = JSON.parse(event.data);
+            if (!data.settings) return;
+            const s = data.settings;
+            const decl = document.getElementById('declinationInput');
+            const incl = document.getElementById('inclinationInput');
+            if (document.activeElement !== decl) decl.value = s.decl;
+            if (document.activeElement !== incl) incl.value = s.incl;
+            let info = 'Sensor ' + s.sensor + ': ';
+            if (!s.calibrated) {
+                info += 'not calibrated';
+            } else {
+                info += 'calibrated ' + s.calMode;
+                if (s.calIncl !== null) {
+                    info += s.calMode === '3D'
+                        ? ', measured inclination ' + s.calIncl.toFixed(1) + '\u00b0 (set ' + s.incl.toFixed(1) + '\u00b0)'
+                        : ', Z from the set inclination';
+                }
+                if (s.check) info += ' \u2013 CHECK CAL: field differs from the calibration, recalibrate';
+            }
+            document.getElementById('calInfo').innerText = info;
+        }
+
+        function showStatus(text) {
+            document.getElementById('status').innerText = text;
+            setTimeout(() => { document.getElementById('status').innerText = ''; }, 2000);
         }
 
         function onOpen(event) {
@@ -85,16 +134,26 @@
         }
 
         function setDeclination() {
-            const declinationValue = document.getElementById('declinationInput').value;
-            console.log('Sending declination:', declinationValue);
-            websocket.send('decl:' + declinationValue);
-            document.getElementById('status').innerText = 'Declination set!';
-            setTimeout(() => { document.getElementById('status').innerText = ''; }, 2000);
+            websocket.send('decl:' + document.getElementById('declinationInput').value);
+            showStatus('Declination set!');
+        }
+
+        function setInclination() {
+            websocket.send('incl:' + document.getElementById('inclinationInput').value);
+            showStatus('Inclination set!');
+        }
+
+        function resetCalibration() {
+            if (!confirm('Delete the calibration of the connected sensor?')) return;
+            websocket.send('calreset');
+            showStatus('Calibration reset');
         }
 
         window.addEventListener('load', () => {
             initWebSocket();
             document.getElementById('setDeclinationBtn').addEventListener('click', setDeclination);
+            document.getElementById('setInclinationBtn').addEventListener('click', setInclination);
+            document.getElementById('resetCalBtn').addEventListener('click', resetCalibration);
         });
     </script>
 </body>

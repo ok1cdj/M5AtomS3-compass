@@ -82,6 +82,17 @@ static void meanOf(const int16_t (*samples)[3], int count, double mean[3]) {
   for (int a = 0; a < 3; a++) mean[a] /= count;
 }
 
+float fieldInclination(const float mag[3], const float acc[3]) {
+  double accNorm = sqrt(acc[0] * acc[0] + acc[1] * acc[1] + acc[2] * acc[2]);
+  if (accNorm <= 0) return NAN;
+  double up[3] = {acc[0] / accNorm, acc[1] / accNorm, acc[2] / accNorm};
+  double upComponent = mag[0] * up[0] + mag[1] * up[1] + mag[2] * up[2];
+  double h[3];
+  for (int a = 0; a < 3; a++) h[a] = mag[a] - upComponent * up[a];
+  double horizontal = sqrt(h[0] * h[0] + h[1] * h[1] + h[2] * h[2]);
+  return atan2(-upComponent, horizontal) * 180.0 / M_PI;
+}
+
 MagCalibration fitMagCalibration(const int16_t (*samples)[3], int count, int levelCount, float inclinationDeg) {
   MagCalibration cal = {};
   if (count < MIN_SAMPLES) return cal;

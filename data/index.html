@@ -88,6 +88,7 @@
         function onMessage(event) {
             try {
                 const data = JSON.parse(event.data);
+                if (data.azimuth === undefined) return; // settings message
                 document.getElementById('azimuthValue').innerHTML = data.azimuth;
                 document.getElementById('elevValue').innerHTML = data.elev;
                 const battery = document.getElementById('battery');

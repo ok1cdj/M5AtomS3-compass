@@ -85,6 +85,16 @@ int main() {
   c = fitMagCalibration(buf, 100, 0, 66);
   printf("still: ok=%d (expected 0)\n", c.ok);
   if (c.ok) fails++;
+  // 4) inclination from field and gravity, level and tilted 30 deg about X
+  for (int t = 0; t < 2; t++) {
+    double e = t ? 30 * M_PI / 180 : 0;
+    double bx = field[0], by = 0, bz = field[2];
+    float mag[3] = {(float)bx, (float)(by * cos(e) + bz * sin(e)), (float)(-by * sin(e) + bz * cos(e))};
+    float acc[3] = {0, (float)sin(e), (float)cos(e)}; // +1 g up, tilted the same way
+    float incl = fieldInclination(mag, acc);
+    printf("inclination %s: %.2f (expected 66)\n", t ? "tilted" : "level", incl);
+    if (fabs(incl - 66) > 0.1) fails++;
+  }
   printf(fails ? "FAILED %d\n" : "ALL PASSED\n", fails);
   return fails;
 }

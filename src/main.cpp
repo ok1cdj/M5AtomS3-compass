@@ -38,9 +38,22 @@ int offsetX = 0;
 int offsetY = 0;
 int offsetZ = 0;
 const unsigned long LEVEL_CALIBRATION_TIME_MS = 3000;
-// Magnetic inclination for the Z offset when the sensor can only be turned around the vertical
-// (antenna boom). About 66 deg in Central Europe; see the NOAA magnetic field calculator.
-const float MAGNETIC_INCLINATION_DEG = 66.0;
+// Magnetic inclination of the location (web setting), used for the Z offset when the sensor
+// can only be turned around the vertical (antenna boom) and to check a calibration.
+// 66 deg in Central Europe; see the NOAA magnetic field calculator.
+float magneticInclination = 66.0;
+// Calibration quality: measured at the end of a calibration while level and still
+float calInclination = NAN;  // measured inclination, deg
+float calFieldNorm = 0;      // calibrated field magnitude
+bool calHorizontalOnly = false;
+const float CAL_INCLINATION_TOLERANCE_DEG = 3;  // DONE screen: measured vs set inclination
+// CHECK CAL: field magnitude or inclination far from the calibration values for a while
+const float CHECK_CAL_NORM_RATIO = 0.2;
+const float CHECK_CAL_INCLINATION_DEG = 8;
+const float CHECK_CAL_FILTER_ALPHA = 0.05;     // per display update (4 Hz): ~5 s
+float checkNormRatio = 1.0;
+float checkInclinationDiff = 0;
+bool calSuspect = false;
 // Guided calibration: the screen tells what to do; samples are collected only during the
 // phases, not while the antenna is being moved to the next position
 // Live angle shown during a phase, from the accelerometer
@@ -73,6 +86,11 @@ float accOffX = 0.0;
 float accOffY = 0.0;
 
 int magneticDeclination = 5;
+// Requests from the WebSocket handler (async_tcp task), applied in loop()
+const int NO_PENDING_DECLINATION = -1000;
+volatile int pendingDeclination = NO_PENDING_DECLINATION;
+volatile float pendingInclination = NAN;
+volatile bool calResetRequested = false;
 bool declinationMode = false;
 unsigned long lastDeclinationSetTime = 0;
 
@@ -81,22 +99,33 @@ uint32_t pressStartTime = 0;
 const int BATTERY_WARN_PERCENT = 25;
 const int BATTERY_LOW_PERCENT = 10;
 
+String settingsJson() {
+  char json[220];
+  snprintf(json, sizeof(json),
+           "{\"settings\":{\"decl\":%d,\"incl\":%.1f,\"sensor\":\"%s\",\"calibrated\":%s,"
+           "\"calMode\":\"%s\",\"calIncl\":%s,\"check\":%s}}",
+           magneticDeclination, magneticInclination, sensorName(), calibrated ? "true" : "false",
+           calHorizontalOnly ? "2D" : "3D", isnan(calInclination) ? "null" : String(calInclination, 1).c_str(),
+           calSuspect ? "true" : "false");
+  return String(json);
+}
+
+// Runs in the async_tcp task: only records requests, loop() applies and saves them
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-  if (type == WS_EVT_DATA) {
+  if (type == WS_EVT_CONNECT) {
+    client->text(settingsJson());
+  } else if (type == WS_EVT_DATA) {
     AwsFrameInfo *info = (AwsFrameInfo*)arg;
     if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-      data[len] = 0; // Null-terminate
-      String message = (char*)data;
+      String message = String((const char *)data, len);
       if (message.startsWith("decl:")) {
         int decl = message.substring(5).toInt();
-        // Basic validation for declination
-        if (decl >= -90 && decl <= 90) { 
-          magneticDeclination = decl;
-          preferences.begin("compass", false);
-          preferences.putInt("decl", magneticDeclination);
-          preferences.end();
-          M5.Log.printf("Declination set to %d via WebSocket\n", magneticDeclination);
-        }
+        if (decl >= -90 && decl <= 90) pendingDeclination = decl;
+      } else if (message.startsWith("incl:")) {
+        float incl = message.substring(5).toFloat();
+        if (incl >= 0 && incl <= 90) pendingInclination = incl;
+      } else if (message == "calreset") {
+        calResetRequested = true;
       }
     }
   }
@@ -147,6 +176,9 @@ void loadCalibration() {
   scaleZ = getFloatOr(calKey("sclZ"), 1.0);
   accOffX = getFloatOr(calKey("accX"), 0.0);
   accOffY = getFloatOr(calKey("accY"), 0.0);
+  calInclination = getFloatOr(calKey("cIncl"), NAN);
+  calFieldNorm = getFloatOr(calKey("cNorm"), 0.0);
+  calHorizontalOnly = preferences.getBool(calKey("c2D").c_str(), false);
   preferences.end();
   M5.Log.printf("Calibration (%s): %s, offsets %d, %d, %d, scales %.3f, %.3f, %.3f, acc %.3f, %.3f\n",
                 sensorName(), calibrated ? "yes" : "no", offsetX, offsetY, offsetZ,
@@ -164,7 +196,53 @@ void saveCalibration() {
   preferences.putFloat(calKey("sclZ").c_str(), scaleZ);
   preferences.putFloat(calKey("accX").c_str(), accOffX);
   preferences.putFloat(calKey("accY").c_str(), accOffY);
+  preferences.putFloat(calKey("cIncl").c_str(), calInclination);
+  preferences.putFloat(calKey("cNorm").c_str(), calFieldNorm);
+  preferences.putBool(calKey("c2D").c_str(), calHorizontalOnly);
   preferences.end();
+}
+
+void resetCalibration() {
+  calibrated = false;
+  offsetX = offsetY = offsetZ = 0;
+  scaleX = scaleY = scaleZ = 1.0;
+  accOffX = accOffY = 0.0;
+  calInclination = NAN;
+  calFieldNorm = 0;
+  calHorizontalOnly = false;
+  calSuspect = false;
+  saveCalibration();
+  filterInitialized = false;
+  M5.Log.printf("Calibration of %s reset\n", sensorName());
+}
+
+// Applies settings requested over the WebSocket and tells all clients the new state
+void applyPendingSettings() {
+  bool changed = false;
+  if (pendingDeclination != NO_PENDING_DECLINATION) {
+    magneticDeclination = pendingDeclination;
+    pendingDeclination = NO_PENDING_DECLINATION;
+    preferences.begin("compass", false);
+    preferences.putInt("decl", magneticDeclination);
+    preferences.end();
+    M5.Log.printf("Declination set to %d\n", magneticDeclination);
+    changed = true;
+  }
+  if (!isnan(pendingInclination)) {
+    magneticInclination = pendingInclination;
+    pendingInclination = NAN;
+    preferences.begin("compass", false);
+    preferences.putFloat("incl", magneticInclination);
+    preferences.end();
+    M5.Log.printf("Inclination set to %.1f\n", magneticInclination);
+    changed = true;
+  }
+  if (calResetRequested) {
+    calResetRequested = false;
+    resetCalibration();
+    changed = true;
+  }
+  if (changed) ws.textAll(settingsJson());
 }
 
 // Reads the sensors and updates the filtered, calibrated vectors
@@ -218,6 +296,7 @@ void setup() {
   
   preferences.begin("compass", false);
   magneticDeclination = preferences.getInt("decl", 5);
+  magneticInclination = getFloatOr("incl", 66.0);
   preferences.end();
 
   sensorsBegin();
@@ -246,6 +325,7 @@ void loop() {
   int a;
   M5.update();
   batteryUpdate();
+  applyPendingSettings();
 
   if (declinationMode) {
     if (M5.BtnA.wasReleased()) {
@@ -331,6 +411,23 @@ void loop() {
       M5.Log.printf("Diag: raw=%d,%d,%d acc=%.2f,%.2f,%.2f mag=%.0f,%.0f,%.0f |m|=%.0f dip=%.1f\n",
                     lastRaw[0], lastRaw[1], lastRaw[2], accX, accY, accZ, mx, my, mz, mag_norm, dip);
 
+      // CHECK CAL: the field should keep the magnitude and inclination it had at calibration
+      if (calibrated && calFieldNorm > 0 && !isnan(calInclination)) {
+        const float mag[3] = {mx, my, mz};
+        const float acc[3] = {accX, accY, accZ};
+        float inclination = fieldInclination(mag, acc);
+        checkNormRatio += CHECK_CAL_FILTER_ALPHA * (mag_norm / calFieldNorm - checkNormRatio);
+        checkInclinationDiff += CHECK_CAL_FILTER_ALPHA * (inclination - calInclination - checkInclinationDiff);
+        bool suspect = fabs(checkNormRatio - 1) > CHECK_CAL_NORM_RATIO ||
+                       fabs(checkInclinationDiff) > CHECK_CAL_INCLINATION_DEG;
+        if (suspect != calSuspect) {
+          calSuspect = suspect;
+          M5.Log.printf("Calibration check: %s (field %.2f x, inclination %+.1f deg)\n",
+                        suspect ? "suspect" : "ok", checkNormRatio, checkInclinationDiff);
+          ws.textAll(settingsJson());
+        }
+      }
+
       heading += magneticDeclination * M_PI / 180.0;
 
       a = (int)round(heading * 180 / M_PI) % 360;
@@ -341,7 +438,12 @@ void loop() {
       canvas.fillSprite(BLACK);
 
       // Status bar for calibration
-      if (calibrated) {
+      if (calibrated && calSuspect) {
+          canvas.setTextSize(1);
+          canvas.setTextColor(ORANGE);
+          canvas.setTextDatum(TC_DATUM); // Top-Center datum
+          canvas.drawString("CHECK CAL", canvas.width() / 2, 2);
+      } else if (calibrated) {
           canvas.setTextSize(1);
           canvas.setTextColor(GREEN);
           canvas.setTextDatum(TC_DATUM); // Top-Center datum
@@ -395,9 +497,9 @@ void loop() {
       }
       char json_data[360];
       snprintf(json_data, sizeof(json_data),
-               "{\"azimuth\":%d, \"elev\":%d, \"sensor\":\"%s\", \"acc\":[%.3f,%.3f,%.3f], \"raw\":[%d,%d,%d], \"off\":[%d,%d,%d], \"scl\":[%.3f,%.3f,%.3f], \"dip\":%.1f, \"bat\":%s}",
+               "{\"azimuth\":%d, \"elev\":%d, \"sensor\":\"%s\", \"acc\":[%.3f,%.3f,%.3f], \"raw\":[%d,%d,%d], \"off\":[%d,%d,%d], \"scl\":[%.3f,%.3f,%.3f], \"dip\":%.1f, \"bat\":%s, \"chk\":%s}",
                a, (int)elevation, sensorName(), accX, accY, accZ, lastRaw[0], lastRaw[1], lastRaw[2],
-               offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ, dip, bat_json);
+               offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ, dip, bat_json, calSuspect ? "true" : "false");
       ws.textAll(json_data);
       previousMillis = currentMillis;
     }
@@ -520,7 +622,7 @@ void runCalibration() {
     if (p == 0) levelCount = count;
   }
 
-  MagCalibration fit = fitMagCalibration(calibrationSamples, count, levelCount, MAGNETIC_INCLINATION_DEG);
+  MagCalibration fit = fitMagCalibration(calibrationSamples, count, levelCount, magneticInclination);
   if (!fit.ok) {
     M5.Log.printf("Calibration failed (%d samples), previous calibration kept\n", count);
     showCalibrationResult(RED, "CAL FAILED", "turn more");
@@ -534,6 +636,7 @@ void runCalibration() {
   scaleX = fit.scale[0];
   scaleY = fit.scale[1];
   scaleZ = fit.scale[2];
+  calHorizontalOnly = fit.horizontalOnly;
   M5.Log.printf("Calibration (%s, %d samples): offsets %d, %d, %d, scales %.3f, %.3f, %.3f\n",
                 fit.horizontalOnly ? "horizontal" : "3D", count,
                 offsetX, offsetY, offsetZ, scaleX, scaleY, scaleZ);
@@ -574,15 +677,26 @@ void runCalibration() {
   canvas.drawString("keep still", canvas.width() / 2, 75);
   canvas.pushSprite(0, 0);
 
-  float sumX = 0, sumY = 0;
+  // The magnetometer is averaged too: level and still, it gives the calibration quality
+  float sumX = 0, sumY = 0, sumZ = 0;
   int samples = 0;
+  double magSum[3] = {0, 0, 0};
+  int magSamples = 0;
   unsigned long levelStartTime = millis();
   while (millis() - levelStartTime < LEVEL_CALIBRATION_TIME_MS) {
     float ax, ay, az;
     if (readAccRaw(ax, ay, az)) {
       sumX += ax;
       sumY += ay;
+      sumZ += az;
       samples++;
+    }
+    int rx, ry, rz;
+    if (readMagRaw(rx, ry, rz)) {
+      magSum[0] += rx;
+      magSum[1] += ry;
+      magSum[2] += rz;
+      magSamples++;
     }
     delay(10);
   }
@@ -592,16 +706,46 @@ void runCalibration() {
   }
   M5.Log.printf("Level calibration: acc offsets %.3f, %.3f from %d samples\n", accOffX, accOffY, samples);
 
+  calInclination = NAN;
+  calFieldNorm = 0;
+  if (samples > 0 && magSamples > 0) {
+    const float mag[3] = {(float)((magSum[0] / magSamples - offsetX) * scaleX),
+                          (float)((magSum[1] / magSamples - offsetY) * scaleY),
+                          (float)((magSum[2] / magSamples - offsetZ) * scaleZ)};
+    const float acc[3] = {sumX / samples - accOffX, sumY / samples - accOffY, sumZ / samples};
+    calInclination = fieldInclination(mag, acc);
+    calFieldNorm = sqrt(mag[0] * mag[0] + mag[1] * mag[1] + mag[2] * mag[2]);
+    M5.Log.printf("Calibration quality: inclination %.1f (set %.1f), field %.0f\n",
+                  calInclination, magneticInclination, calFieldNorm);
+  }
+  checkNormRatio = 1.0;
+  checkInclinationDiff = 0;
+  calSuspect = false;
+
   calibrated = true;
   saveCalibration();
   filterInitialized = false; // restart the filter with the new calibration
 
-  canvas.fillSprite(GREEN);
-  canvas.setTextSize(2);
+  // DONE with the measured vs set inclination; in 2D the Z offset was derived from the set
+  // value, so only a 3D calibration gives an independent check
+  canvas.fillSprite(DARKGREEN);
   canvas.setTextDatum(MC_DATUM);
-  canvas.drawString("DONE", canvas.width() / 2, canvas.height() / 2);
+  canvas.setTextSize(3);
+  canvas.drawString("DONE", canvas.width() / 2, 28);
+  canvas.setTextSize(2);
+  if (!isnan(calInclination)) {
+    bool good = calHorizontalOnly || fabs(calInclination - magneticInclination) <= CAL_INCLINATION_TOLERANCE_DEG;
+    canvas.fillRect(8, 56, canvas.width() - 16, 24, BLACK);
+    canvas.setTextColor(good ? GREEN : ORANGE);
+    canvas.drawString("I " + String((int)round(calInclination)) + "/" + String((int)round(magneticInclination)),
+                      canvas.width() / 2, 68);
+    canvas.setTextColor(WHITE);
+  }
+  canvas.setTextSize(1);
+  canvas.drawString(calHorizontalOnly ? "2D: Z from set incl." : "3D: measured/set incl.",
+                    canvas.width() / 2, 100);
   canvas.pushSprite(0, 0);
-  delay(2000);
+  delay(4000);
 
   canvas.fillSprite(BLACK);
   canvas.pushSprite(0, 0);

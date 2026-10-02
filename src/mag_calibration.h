@@ -15,3 +15,7 @@ struct MagCalibration {
 // sensor was level with Z up. Only the first levelCount samples (taken level) are used for that
 // fit, since tilted samples shift the X/Y circle. Pure math, no hardware access.
 MagCalibration fitMagCalibration(const int16_t (*samples)[3], int count, int levelCount, float inclinationDeg);
+
+// Magnetic inclination in degrees (positive = field points down) from a calibrated field
+// vector and the accelerometer reading (+1 g upwards at rest), in the same axes
+float fieldInclination(const float mag[3], const float acc[3]);
