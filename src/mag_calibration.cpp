@@ -74,7 +74,15 @@ static bool fitAxisAligned(const int16_t (*samples)[3], int count, int axes,
   return true;
 }
 
-MagCalibration fitMagCalibration(const int16_t (*samples)[3], int count, float inclinationDeg) {
+static void meanOf(const int16_t (*samples)[3], int count, double mean[3]) {
+  for (int a = 0; a < 3; a++) mean[a] = 0;
+  for (int i = 0; i < count; i++) {
+    for (int a = 0; a < 3; a++) mean[a] += samples[i][a];
+  }
+  for (int a = 0; a < 3; a++) mean[a] /= count;
+}
+
+MagCalibration fitMagCalibration(const int16_t (*samples)[3], int count, int levelCount, float inclinationDeg) {
   MagCalibration cal = {};
   if (count < MIN_SAMPLES) return cal;
 
@@ -99,6 +107,13 @@ MagCalibration fitMagCalibration(const int16_t (*samples)[3], int count, float i
 
   double centre[3], radius[3];
   if (cal.horizontalOnly) {
+    // Tilted samples (e.g. at elevation) project the vertical field into X/Y and shift the
+    // circle, so only the level ones are fitted
+    if (levelCount > 0 && levelCount < count) {
+      count = levelCount;
+      if (count < MIN_SAMPLES) return cal;
+      meanOf(samples, count, mean);
+    }
     if (!fitAxisAligned(samples, count, 2, mean, centre, radius)) return cal;
     double r = (radius[0] + radius[1]) / 2;
     cal.scale[0] = r / radius[0];

@@ -12,5 +12,6 @@ struct MagCalibration {
 // collected while the sensor is turned. When the Z axis barely changes, i.e. the sensor was
 // only turned around the vertical axis (antenna boom), only X/Y are fitted: the Z gain is
 // taken from X/Y and the Z offset follows from the known magnetic inclination, assuming the
-// sensor was level with Z up. Pure math, no hardware access.
-MagCalibration fitMagCalibration(const int16_t (*samples)[3], int count, float inclinationDeg);
+// sensor was level with Z up. Only the first levelCount samples (taken level) are used for that
+// fit, since tilted samples shift the X/Y circle. Pure math, no hardware access.
+MagCalibration fitMagCalibration(const int16_t (*samples)[3], int count, int levelCount, float inclinationDeg);

@@ -460,6 +460,7 @@ void runCalibration() {
   // Sensor in hand: turn it in all directions during all phases. On an antenna boom follow
   // the phases: a level turn, a turn at 30 deg elevation, then 90 deg rolls to both sides
   int count = 0;
+  int levelCount = 0; // samples of the first (level) phase
   const int phaseCount = sizeof(CALIBRATION_PHASES) / sizeof(CALIBRATION_PHASES[0]);
   for (int p = 0; p < phaseCount; p++) {
     const CalibrationPhase &phase = CALIBRATION_PHASES[p];
@@ -483,9 +484,10 @@ void runCalibration() {
       }
       M5.update(); // Keep M5 services running
     }
+    if (p == 0) levelCount = count;
   }
 
-  MagCalibration fit = fitMagCalibration(calibrationSamples, count, MAGNETIC_INCLINATION_DEG);
+  MagCalibration fit = fitMagCalibration(calibrationSamples, count, levelCount, MAGNETIC_INCLINATION_DEG);
   if (!fit.ok) {
     M5.Log.printf("Calibration failed (%d samples), previous calibration kept\n", count);
     showCalibrationResult(RED, "CAL FAILED", "turn more");
