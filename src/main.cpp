@@ -38,6 +38,9 @@ int offsetX = 0;
 int offsetY = 0;
 int offsetZ = 0;
 const unsigned long LEVEL_CALIBRATION_TIME_MS = 3000;
+const int LEVEL_MAX_ATTEMPTS = 3;               // level measurement repeated while moving
+const float LEVEL_STILL_ACC_STD_G = 0.02;
+const float LEVEL_STILL_MAG_STD_RATIO = 0.02;
 // Magnetic inclination of the location (web setting), used for the Z offset when the sensor
 // can only be turned around the vertical (antenna boom) and to check a calibration.
 // 66 deg in Central Europe; see the NOAA magnetic field calculator.
@@ -103,10 +106,10 @@ String settingsJson() {
   char json[220];
   snprintf(json, sizeof(json),
            "{\"settings\":{\"decl\":%d,\"incl\":%.1f,\"sensor\":\"%s\",\"calibrated\":%s,"
-           "\"calMode\":\"%s\",\"calIncl\":%s,\"check\":%s}}",
+           "\"calMode\":\"%s\",\"calIncl\":%s,\"calNorm\":%.0f,\"check\":%s}}",
            magneticDeclination, magneticInclination, sensorName(), calibrated ? "true" : "false",
            calHorizontalOnly ? "2D" : "3D", isnan(calInclination) ? "null" : String(calInclination, 1).c_str(),
-           calSuspect ? "true" : "false");
+           calFieldNorm, calSuspect ? "true" : "false");
   return String(json);
 }
 
@@ -670,53 +673,95 @@ void runCalibration() {
     delay(CALIBRATION_REDRAW_MS);
   }
 
-  canvas.fillSprite(BLUE);
-  canvas.setTextDatum(MC_DATUM);
-  canvas.setTextSize(2);
-  canvas.drawString("Leveling", canvas.width() / 2, 50);
-  canvas.drawString("keep still", canvas.width() / 2, 75);
-  canvas.pushSprite(0, 0);
+  // Accelerometer zero and calibration quality from magnetometer/accelerometer pairs taken
+  // level and still. The quality is computed per pair and averaged: averaging the vectors
+  // first would cancel the horizontal field if the device still turns, and raise the
+  // inclination. The sample buffer of the fit is reused for the pairs.
+  int pairs = 0;
+  bool still = false;
+  double accMean[3] = {0, 0, 0};
+  for (int attempt = 0; attempt < LEVEL_MAX_ATTEMPTS && !still; attempt++) {
+    if (attempt > 0) {
+      showCalibrationResult(ORANGE, "keep still!", "measuring");
+    }
+    canvas.fillSprite(BLUE);
+    canvas.setTextDatum(MC_DATUM);
+    canvas.setTextSize(2);
+    canvas.drawString("Leveling", canvas.width() / 2, 50);
+    canvas.drawString("keep still", canvas.width() / 2, 75);
+    canvas.pushSprite(0, 0);
 
-  // The magnetometer is averaged too: level and still, it gives the calibration quality
-  float sumX = 0, sumY = 0, sumZ = 0;
-  int samples = 0;
-  double magSum[3] = {0, 0, 0};
-  int magSamples = 0;
-  unsigned long levelStartTime = millis();
-  while (millis() - levelStartTime < LEVEL_CALIBRATION_TIME_MS) {
-    float ax, ay, az;
-    if (readAccRaw(ax, ay, az)) {
-      sumX += ax;
-      sumY += ay;
-      sumZ += az;
-      samples++;
+    pairs = 0;
+    unsigned long levelStartTime = millis();
+    while (millis() - levelStartTime < LEVEL_CALIBRATION_TIME_MS && 2 * pairs + 1 < CALIBRATION_MAX_SAMPLES) {
+      int rx, ry, rz;
+      float ax, ay, az;
+      if (readMagRaw(rx, ry, rz) && readAccRaw(ax, ay, az)) {
+        int16_t *mag = calibrationSamples[2 * pairs];
+        int16_t *acc = calibrationSamples[2 * pairs + 1];
+        mag[0] = rx; mag[1] = ry; mag[2] = rz;
+        acc[0] = lround(ax * 1000); acc[1] = lround(ay * 1000); acc[2] = lround(az * 1000); // mg
+        pairs++;
+      }
+      delay(5);
     }
-    int rx, ry, rz;
-    if (readMagRaw(rx, ry, rz)) {
-      magSum[0] += rx;
-      magSum[1] += ry;
-      magSum[2] += rz;
-      magSamples++;
+
+    // Still when neither the acceleration nor the field changes noticeably
+    double magMean[3] = {0, 0, 0}, accVar = 0, magVar = 0;
+    for (int a = 0; a < 3; a++) accMean[a] = 0;
+    for (int i = 0; i < pairs; i++) {
+      for (int a = 0; a < 3; a++) {
+        magMean[a] += calibrationSamples[2 * i][a];
+        accMean[a] += calibrationSamples[2 * i + 1][a] / 1000.0;
+      }
     }
-    delay(10);
+    if (pairs == 0) break;
+    for (int a = 0; a < 3; a++) {
+      magMean[a] /= pairs;
+      accMean[a] /= pairs;
+    }
+    for (int i = 0; i < pairs; i++) {
+      for (int a = 0; a < 3; a++) {
+        double dm = calibrationSamples[2 * i][a] - magMean[a];
+        double da = calibrationSamples[2 * i + 1][a] / 1000.0 - accMean[a];
+        magVar += dm * dm;
+        accVar += da * da;
+      }
+    }
+    double magNorm = sqrt(magMean[0] * magMean[0] + magMean[1] * magMean[1] + magMean[2] * magMean[2]);
+    double accStd = sqrt(accVar / pairs);
+    double magStdRatio = magNorm > 0 ? sqrt(magVar / pairs) / magNorm : 1;
+    still = accStd <= LEVEL_STILL_ACC_STD_G && magStdRatio <= LEVEL_STILL_MAG_STD_RATIO;
+    M5.Log.printf("Level measurement %d: %d pairs, acc std %.3f g, field std %.1f %%, %s\n",
+                  attempt + 1, pairs, accStd, magStdRatio * 100, still ? "still" : "moving");
   }
-  if (samples > 0) {
-    accOffX = sumX / samples;
-    accOffY = sumY / samples;
+
+  if (pairs > 0) {
+    accOffX = accMean[0];
+    accOffY = accMean[1];
   }
-  M5.Log.printf("Level calibration: acc offsets %.3f, %.3f from %d samples\n", accOffX, accOffY, samples);
+  M5.Log.printf("Level calibration: acc offsets %.3f, %.3f from %d pairs\n", accOffX, accOffY, pairs);
 
   calInclination = NAN;
   calFieldNorm = 0;
-  if (samples > 0 && magSamples > 0) {
-    const float mag[3] = {(float)((magSum[0] / magSamples - offsetX) * scaleX),
-                          (float)((magSum[1] / magSamples - offsetY) * scaleY),
-                          (float)((magSum[2] / magSamples - offsetZ) * scaleZ)};
-    const float acc[3] = {sumX / samples - accOffX, sumY / samples - accOffY, sumZ / samples};
-    calInclination = fieldInclination(mag, acc);
-    calFieldNorm = sqrt(mag[0] * mag[0] + mag[1] * mag[1] + mag[2] * mag[2]);
+  if (still && pairs > 0) {
+    double inclinationSum = 0, normSum = 0;
+    for (int i = 0; i < pairs; i++) {
+      const int16_t *raw = calibrationSamples[2 * i];
+      const int16_t *accMg = calibrationSamples[2 * i + 1];
+      const float mag[3] = {(float)((raw[0] - offsetX) * scaleX), (float)((raw[1] - offsetY) * scaleY),
+                            (float)((raw[2] - offsetZ) * scaleZ)};
+      const float acc[3] = {(float)(accMg[0] / 1000.0 - accOffX), (float)(accMg[1] / 1000.0 - accOffY),
+                            (float)(accMg[2] / 1000.0)};
+      inclinationSum += fieldInclination(mag, acc);
+      normSum += sqrt(mag[0] * mag[0] + mag[1] * mag[1] + mag[2] * mag[2]);
+    }
+    calInclination = inclinationSum / pairs;
+    calFieldNorm = normSum / pairs;
     M5.Log.printf("Calibration quality: inclination %.1f (set %.1f), field %.0f\n",
                   calInclination, magneticInclination, calFieldNorm);
+  } else {
+    M5.Log.println("Calibration quality not measured: device was not still");
   }
   checkNormRatio = 1.0;
   checkInclinationDiff = 0;

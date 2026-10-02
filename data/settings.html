@@ -113,6 +113,7 @@
                     info += s.calMode === '3D'
                         ? ', measured inclination ' + s.calIncl.toFixed(1) + '\u00b0 (set ' + s.incl.toFixed(1) + '\u00b0)'
                         : ', Z from the set inclination';
+                    info += ', field ' + s.calNorm;
                 }
                 if (s.check) info += ' \u2013 CHECK CAL: field differs from the calibration, recalibrate';
             }
