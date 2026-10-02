@@ -121,13 +121,13 @@ To ensure accurate readings, calibrate the magnetometer and the accelerometer le
 
 **Stage 1: Magnetometer Calibration (guided)**
 
-The screen shows four phases with a countdown; between them an orange screen gives 8 seconds to move to the next position (no samples are taken then, so a running rotator motor does not disturb the calibration). Keep away from metal and electronics.
+The screen shows four phases with a countdown; between them an orange screen gives 8 seconds to move to the next position (no samples are taken then, so a running rotator motor does not disturb the calibration). The live elevation (`EL 28`) or roll (`L 87` / `R 90`) from the accelerometer is shown in green when within 5° of the target, yellow otherwise. Keep away from metal and electronics.
 
 | Phase | Antenna boom | Sensor in hand |
 |-------|--------------|----------------|
 | 1/4 `LEVEL`, 30 s | boom level, turn it one full turn around the mast | turn it in all directions |
 | 2/4 `EL 30`, 30 s | boom at about 30° elevation, turn it one full turn | turn it in all directions |
-| 3/4 `ROLL L 90`, 15 s | rolled 90° to the left around the boom, hold still | turn it in all directions |
+| 3/4 `ROLL L 90`, 15 s | rolled 90° to the left around the boom (e.g. turn the holder on the boom), hold still | turn it in all directions |
 | 4/4 `ROLL R 90`, 15 s | rolled 90° to the right around the boom, hold still | turn it in all directions |
 
 The offsets and axis gains are fitted to all samples (axis-aligned ellipsoid) and the result is shown:

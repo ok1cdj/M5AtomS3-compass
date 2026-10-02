@@ -43,17 +43,23 @@ const unsigned long LEVEL_CALIBRATION_TIME_MS = 3000;
 const float MAGNETIC_INCLINATION_DEG = 66.0;
 // Guided calibration: the screen tells what to do; samples are collected only during the
 // phases, not while the antenna is being moved to the next position
+// Live angle shown during a phase, from the accelerometer
+enum class CalibrationAngle { Elevation, Roll };
 struct CalibrationPhase {
   const char *title;
   const char *action;
   unsigned long durationMs;
+  CalibrationAngle angle;
+  float targetDeg; // roll: positive = right side down, looking along the antenna
 };
 const CalibrationPhase CALIBRATION_PHASES[] = {
-  {"LEVEL", "Turn 360", 30000},
-  {"EL 30", "Turn 360", 30000},
-  {"ROLL L 90", "Hold", 15000},
-  {"ROLL R 90", "Hold", 15000},
+  {"LEVEL", "Turn 360", 30000, CalibrationAngle::Elevation, 0},
+  {"EL 30", "Turn 360", 30000, CalibrationAngle::Elevation, 30},
+  {"ROLL L 90", "Hold", 15000, CalibrationAngle::Roll, -90},
+  {"ROLL R 90", "Hold", 15000, CalibrationAngle::Roll, 90},
 };
+const float CALIBRATION_ANGLE_TOLERANCE_DEG = 5; // angle shown green within this of the target
+const unsigned long CALIBRATION_REDRAW_MS = 200;
 const unsigned long CALIBRATION_MOVE_TIME_MS = 8000; // to move to the next position
 // Samples kept for the calibration fit, enough for all phases at 50 Hz
 const int CALIBRATION_MAX_SAMPLES = 4800;
@@ -427,32 +433,59 @@ void showCalibrationResult(uint16_t color, const char *line1, const char *line2)
   delay(2000);
 }
 
+// Elevation (+ = antenna up) or roll (+ = right side down) in degrees, NAN if not available
+float calibrationAngle(CalibrationAngle angle) {
+  float ax, ay, az;
+  if (!readAccRaw(ax, ay, az)) return NAN;
+  ax -= accOffX;
+  ay -= accOffY;
+  if (angle == CalibrationAngle::Elevation) {
+    return atan2(ay, sqrt(ax * ax + az * az)) * 180.0 / M_PI;
+  }
+  // Device +X points to the right of the antenna, so right side down gives negative X
+  return atan2(-ax, az) * 180.0 / M_PI;
+}
+
 // Text size 2 fits 10 characters on the 128 px display
-void drawCalibrationScreen(uint16_t color, const String &step, const char *title, const char *action, int secondsLeft) {
+void drawCalibrationScreen(uint16_t color, const String &step, const CalibrationPhase &phase,
+                           const char *action, int secondsLeft) {
   canvas.fillSprite(color);
   canvas.setTextDatum(MC_DATUM);
   canvas.setTextSize(1);
-  canvas.drawString(step, canvas.width() / 2, 10);
+  canvas.drawString(step, canvas.width() / 2, 8);
   canvas.setTextSize(2);
-  canvas.drawString(title, canvas.width() / 2, 35);
-  canvas.drawString(action, canvas.width() / 2, 60);
+  canvas.drawString(phase.title, canvas.width() / 2, 28);
+  canvas.drawString(action, canvas.width() / 2, 50);
+
+  // Live angle, green when on target
+  float angle = calibrationAngle(phase.angle);
+  if (!isnan(angle)) {
+    String text;
+    if (phase.angle == CalibrationAngle::Elevation) {
+      text = "EL " + String((int)round(angle));
+    } else {
+      text = String(angle >= 0 ? "R " : "L ") + String((int)round(fabs(angle)));
+    }
+    canvas.fillRect(14, 62, canvas.width() - 28, 24, BLACK);
+    canvas.setTextColor(fabs(angle - phase.targetDeg) <= CALIBRATION_ANGLE_TOLERANCE_DEG ? GREEN : YELLOW);
+    canvas.drawString(text, canvas.width() / 2, 74);
+    canvas.setTextColor(WHITE);
+  }
+
   canvas.setTextSize(3);
-  canvas.drawString(String(secondsLeft), canvas.width() / 2, 100);
+  canvas.drawString(String(secondsLeft), canvas.width() / 2, 108);
   canvas.pushSprite(0, 0);
 }
 
-// Waits while the antenna is moved to the next position; no samples are taken
-void calibrationMovePause(const char *nextTitle) {
+// Waits while the antenna is moved to the next position; no samples are taken.
+// The live angle helps to set the position.
+void calibrationMovePause(const CalibrationPhase &next) {
   unsigned long start = millis();
-  int lastSecondsLeft = -1;
   while (millis() - start < CALIBRATION_MOVE_TIME_MS) {
     int secondsLeft = (CALIBRATION_MOVE_TIME_MS - (millis() - start) + 999) / 1000;
-    if (secondsLeft != lastSecondsLeft) {
-      lastSecondsLeft = secondsLeft;
-      drawCalibrationScreen(ORANGE, "Move to next position", nextTitle, "", secondsLeft);
-    }
+    drawCalibrationScreen(ORANGE, "Move to next position", next, "", secondsLeft);
     M5.update();
-    delay(20);
+    delay(CALIBRATION_REDRAW_MS);
   }
 }
 
@@ -464,15 +497,15 @@ void runCalibration() {
   const int phaseCount = sizeof(CALIBRATION_PHASES) / sizeof(CALIBRATION_PHASES[0]);
   for (int p = 0; p < phaseCount; p++) {
     const CalibrationPhase &phase = CALIBRATION_PHASES[p];
-    if (p > 0) calibrationMovePause(phase.title);
+    if (p > 0) calibrationMovePause(phase);
 
     unsigned long start = millis();
-    int lastSecondsLeft = -1;
+    unsigned long lastRedraw = 0;
     while (millis() - start < phase.durationMs) {
-      int secondsLeft = (phase.durationMs - (millis() - start) + 999) / 1000;
-      if (secondsLeft != lastSecondsLeft) {
-        lastSecondsLeft = secondsLeft;
-        drawCalibrationScreen(RED, "CAL " + String(p + 1) + "/" + String(phaseCount), phase.title,
+      if (lastRedraw == 0 || millis() - lastRedraw >= CALIBRATION_REDRAW_MS) {
+        lastRedraw = millis();
+        int secondsLeft = (phase.durationMs - (millis() - start) + 999) / 1000;
+        drawCalibrationScreen(RED, "CAL " + String(p + 1) + "/" + String(phaseCount), phase,
                               phase.action, secondsLeft);
       }
       int rawX, rawY, rawZ;
