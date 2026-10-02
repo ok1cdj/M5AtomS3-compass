@@ -139,6 +139,8 @@ The offsets and axis gains are fitted to all samples (axis-aligned ellipsoid) an
 - `CAL 2D OK`: only a level turn was possible; the vertical axis offset is derived from the magnetic inclination (`MAGNETIC_INCLINATION_DEG` in `src/main.cpp`, 66° for Central Europe). Fine for level use, less accurate with elevation.
 - `CAL FAILED`: the sensor was not turned enough; the previous calibration is kept.
 
+**Recording a calibration for analysis:** every calibration sample (magnetometer and accelerometer) and the fit result are streamed to the serial log (`CALS ...` / `CALE ...` lines) and to WebSocket clients. Run `tools/cal_record.py [host] [file]` (needs `pip install websockets`) on a computer in the same network before starting the calibration; it saves everything to a JSON Lines file.
+
 **Stage 2: Level Calibration**
 1.  After the magnetometer calibration, the screen will turn **BLUE** and give 8 seconds to bring the device level (on a boom: back to 0° elevation and roll), showing the live elevation and roll in green when within 5° of level.
 2.  Keep it level and still. The accelerometer zero is measured, which corrects the elevation and the tilt compensation. The field is measured at the same time: the `DONE` screen shows the measured inclination against the set one (`I 62/58`). After a 3D calibration they should agree within 3° (green); a bigger difference (orange) means iron nearby or an inaccurate calibration, or a wrong inclination setting.

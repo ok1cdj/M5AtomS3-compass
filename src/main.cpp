@@ -528,6 +528,46 @@ void loop() {
   }
 }
 
+// Calibration data stream for analysis on a PC: every sample goes to the serial log
+// ("CALS phase mx my mz ax ay az") and in batches to WebSocket clients ({"calSamples":...});
+// events (start, phase, fit, quality, done) go to both as {"calEvent":...}. Batches are
+// dropped when the WebSocket queue is full, the calibration never waits for the network.
+const unsigned long CAL_STREAM_INTERVAL_MS = 250;
+String calStreamBatch;
+int calStreamCount = 0;
+int calStreamDropped = 0;
+unsigned long calStreamLastFlush = 0;
+
+void calStreamFlush(int phase, bool force) {
+  if (calStreamCount == 0 || (!force && millis() - calStreamLastFlush < CAL_STREAM_INTERVAL_MS)) return;
+  calStreamLastFlush = millis();
+  if (!wifiDisabled && ws.count() > 0) {
+    if (ws.availableForWriteAll()) {
+      ws.textAll("{\"calSamples\":{\"phase\":" + String(phase) + ",\"s\":[" + calStreamBatch + "]}}");
+    } else {
+      calStreamDropped += calStreamCount;
+    }
+    ws.cleanupClients();
+  }
+  calStreamBatch = "";
+  calStreamCount = 0;
+}
+
+void calStreamSample(int phase, int mx, int my, int mz, float ax, float ay, float az) {
+  M5.Log.printf("CALS %d %d %d %d %.3f %.3f %.3f\n", phase, mx, my, mz, ax, ay, az);
+  char item[64];
+  snprintf(item, sizeof(item), "%s[%d,%d,%d,%ld,%ld,%ld]", calStreamCount ? "," : "", mx, my, mz,
+           lround(ax * 1000), lround(ay * 1000), lround(az * 1000)); // acceleration in mg
+  calStreamBatch += item;
+  calStreamCount++;
+  calStreamFlush(phase, false);
+}
+
+void calStreamEvent(const String &json) {
+  M5.Log.printf("CALE %s\n", json.c_str());
+  if (!wifiDisabled && ws.count() > 0) ws.textAll("{\"calEvent\":" + json + "}");
+}
+
 void showCalibrationResult(uint16_t color, const char *line1, const char *line2) {
   canvas.fillSprite(color);
   canvas.setTextDatum(MC_DATUM);
@@ -600,9 +640,15 @@ void runCalibration() {
   int count = 0;
   int levelCount = 0; // samples of the first (level) phase
   const int phaseCount = sizeof(CALIBRATION_PHASES) / sizeof(CALIBRATION_PHASES[0]);
+  calStreamBatch = "";
+  calStreamCount = 0;
+  calStreamDropped = 0;
+  calStreamEvent("{\"type\":\"start\",\"sensor\":\"" + String(sensorName()) + "\",\"phases\":" +
+                 String(phaseCount) + ",\"incl\":" + String(magneticInclination, 1) + "}");
   for (int p = 0; p < phaseCount; p++) {
     const CalibrationPhase &phase = CALIBRATION_PHASES[p];
     if (p > 0) calibrationMovePause(phase);
+    calStreamEvent("{\"type\":\"phase\",\"phase\":" + String(p + 1) + ",\"name\":\"" + phase.title + "\"}");
 
     unsigned long start = millis();
     unsigned long lastRedraw = 0;
@@ -619,13 +665,26 @@ void runCalibration() {
         calibrationSamples[count][1] = rawY;
         calibrationSamples[count][2] = rawZ;
         count++;
+        float ax = NAN, ay = NAN, az = NAN;
+        readAccRaw(ax, ay, az);
+        calStreamSample(p + 1, rawX, rawY, rawZ, ax, ay, az);
       }
       M5.update(); // Keep M5 services running
     }
+    calStreamFlush(p + 1, true);
     if (p == 0) levelCount = count;
   }
 
   MagCalibration fit = fitMagCalibration(calibrationSamples, count, levelCount, magneticInclination);
+  {
+    char json[260];
+    snprintf(json, sizeof(json),
+             "{\"type\":\"fit\",\"ok\":%s,\"mode\":\"%s\",\"count\":%d,\"levelCount\":%d,\"dropped\":%d,"
+             "\"off\":[%.1f,%.1f,%.1f],\"scl\":[%.4f,%.4f,%.4f]}",
+             fit.ok ? "true" : "false", fit.horizontalOnly ? "2D" : "3D", count, levelCount, calStreamDropped,
+             fit.offset[0], fit.offset[1], fit.offset[2], fit.scale[0], fit.scale[1], fit.scale[2]);
+    calStreamEvent(json);
+  }
   if (!fit.ok) {
     M5.Log.printf("Calibration failed (%d samples), previous calibration kept\n", count);
     showCalibrationResult(RED, "CAL FAILED", "turn more");
@@ -702,6 +761,7 @@ void runCalibration() {
         mag[0] = rx; mag[1] = ry; mag[2] = rz;
         acc[0] = lround(ax * 1000); acc[1] = lround(ay * 1000); acc[2] = lround(az * 1000); // mg
         pairs++;
+        calStreamSample(phaseCount + 1, rx, ry, rz, ax, ay, az); // level measurement
       }
       delay(5);
     }
@@ -734,6 +794,7 @@ void runCalibration() {
     still = accStd <= LEVEL_STILL_ACC_STD_G && magStdRatio <= LEVEL_STILL_MAG_STD_RATIO;
     M5.Log.printf("Level measurement %d: %d pairs, acc std %.3f g, field std %.1f %%, %s\n",
                   attempt + 1, pairs, accStd, magStdRatio * 100, still ? "still" : "moving");
+    calStreamFlush(phaseCount + 1, true);
   }
 
   if (pairs > 0) {
@@ -762,6 +823,14 @@ void runCalibration() {
                   calInclination, magneticInclination, calFieldNorm);
   } else {
     M5.Log.println("Calibration quality not measured: device was not still");
+  }
+  {
+    char json[200];
+    snprintf(json, sizeof(json),
+             "{\"type\":\"quality\",\"still\":%s,\"pairs\":%d,\"accOff\":[%.4f,%.4f],\"incl\":%s,\"norm\":%.0f}",
+             still ? "true" : "false", pairs, accOffX, accOffY,
+             isnan(calInclination) ? "null" : String(calInclination, 2).c_str(), calFieldNorm);
+    calStreamEvent(json);
   }
   checkNormRatio = 1.0;
   checkInclinationDiff = 0;
